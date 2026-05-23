@@ -33,6 +33,7 @@ const tokenCache = {
 
 type AuthStep = "intro" | "email" | "code";
 type PendingFlow = "signIn" | "signUp";
+type AuthMode = "signIn" | "signUp";
 
 export default function App() {
   if (!publishableKey) {
@@ -78,6 +79,7 @@ function EmailCodeAuth() {
   const { isLoaded: isSignInLoaded, signIn, setActive } = useSignIn();
   const { isLoaded: isSignUpLoaded, signUp } = useSignUp();
   const [step, setStep] = useState<AuthStep>("intro");
+  const [authMode, setAuthMode] = useState<AuthMode>("signIn");
   const [pendingFlow, setPendingFlow] = useState<PendingFlow | null>(null);
   const [emailAddress, setEmailAddress] = useState("");
   const [code, setCode] = useState("");
@@ -102,16 +104,17 @@ function EmailCodeAuth() {
     setIsSubmitting(true);
     setErrorMessage(null);
 
-    try {
-      await signIn.create({
-        identifier: trimmedEmail,
-        strategy: "email_code",
-      });
-      setPendingFlow("signIn");
-      setStep("code");
-      return;
-    } catch (error) {
-      if (!isMissingAccountError(error)) {
+    if (authMode === "signIn") {
+      try {
+        await signIn.create({
+          identifier: trimmedEmail,
+          strategy: "email_code",
+        });
+        setPendingFlow("signIn");
+        setStep("code");
+        setIsSubmitting(false);
+        return;
+      } catch (error) {
         setErrorMessage(getErrorMessage(error));
         setIsSubmitting(false);
         return;
@@ -187,6 +190,14 @@ function EmailCodeAuth() {
     setErrorMessage(null);
   };
 
+  const startAuthFlow = (mode: AuthMode) => {
+    setAuthMode(mode);
+    setStep("email");
+    setCode("");
+    setPendingFlow(null);
+    setErrorMessage(null);
+  };
+
   if (!isLoaded) {
     return (
       <View style={styles.container}>
@@ -200,9 +211,12 @@ function EmailCodeAuth() {
     return (
       <View style={styles.container}>
         <Text style={styles.title}>Let's Learn Math</Text>
-        <Text style={styles.body}>Sign in with your email to continue.</Text>
-        <Pressable style={styles.primaryButton} onPress={() => setStep("email")}>
+        <Text style={styles.body}>Use your email to continue without a password.</Text>
+        <Pressable style={styles.primaryButton} onPress={() => startAuthFlow("signIn")}>
           <Text style={styles.primaryButtonText}>Sign in</Text>
+        </Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => startAuthFlow("signUp")}>
+          <Text style={styles.secondaryButtonText}>Sign up</Text>
         </Pressable>
       </View>
     );
@@ -210,10 +224,16 @@ function EmailCodeAuth() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{step === "email" ? "Enter your email" : "Check your email"}</Text>
+      <Text style={styles.title}>
+        {step === "email"
+          ? authMode === "signIn"
+            ? "Sign in"
+            : "Create your account"
+          : "Check your email"}
+      </Text>
       <Text style={styles.body}>
         {step === "email"
-          ? "We will send you a one-time sign-in code."
+          ? "We will send you a one-time code."
           : `Enter the code sent to ${emailAddress.trim()}.`}
       </Text>
 
@@ -251,6 +271,12 @@ function EmailCodeAuth() {
       >
         <Text style={styles.primaryButtonText}>{isSubmitting ? "Please wait..." : "Continue"}</Text>
       </Pressable>
+
+      {step === "email" ? (
+        <Pressable disabled={isSubmitting} style={styles.textButton} onPress={() => setStep("intro")}>
+          <Text style={styles.textButtonText}>Back</Text>
+        </Pressable>
+      ) : null}
 
       {step === "code" ? (
         <Pressable disabled={isSubmitting} style={styles.textButton} onPress={goBackToEmail}>
@@ -300,28 +326,6 @@ function getErrorMessage(error: unknown) {
   }
 
   return "Something went wrong. Please try again.";
-}
-
-function isMissingAccountError(error: unknown) {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "errors" in error &&
-    Array.isArray(error.errors)
-  ) {
-    return error.errors.some((clerkError: unknown) => {
-      if (typeof clerkError !== "object" || clerkError === null || !("code" in clerkError)) {
-        return false;
-      }
-
-      return (
-        clerkError.code === "form_identifier_not_found" ||
-        clerkError.code === "form_param_format_invalid"
-      );
-    });
-  }
-
-  return false;
 }
 
 const styles = StyleSheet.create({
@@ -376,6 +380,7 @@ const styles = StyleSheet.create({
     borderColor: "#d1d5db",
     borderRadius: 8,
     borderWidth: 1,
+    marginTop: 12,
     paddingHorizontal: 18,
     paddingVertical: 14,
   },
