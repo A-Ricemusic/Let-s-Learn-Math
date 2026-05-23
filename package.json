@@ -5,6 +5,7 @@
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.31",
     "convex": "^1.39.1",
+    "effect": "^3.21.2",
     "expo": "~56.0.4",
     "expo-secure-store": "^56.0.4",
     "expo-status-bar": "~56.0.4",
@@ -15,7 +16,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.7"
   },
   "scripts": {
     "start": "expo start",
@@ -23,6 +25,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:all": "bun run check && bun run test",
     "convex:codegen": "convex codegen"
   },
   "private": true
