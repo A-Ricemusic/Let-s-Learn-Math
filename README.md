@@ -1,14 +1,13 @@
 # Let's Learn Math
 
-React Native + Expo starter for a math tutoring app with Clerk auth, Convex storage/backend, and a payment placeholder ready for Clerk Billing or another provider.
+Expo + React Native starter for a math tutoring app. The current milestone is intentionally small: prove Clerk email-code authentication works before connecting Clerk to Convex.
 
-## Architecture
+## Current Scope
 
 - Expo renders the mobile app.
-- Clerk handles authentication and protects Convex calls through a Convex JWT template.
-- Convex stores lesson metadata, learner progress, subscription state, and video files via Convex file storage.
-- The app queries Convex for published lessons and receives temporary video URLs for playback.
-- Payments start from `convex/payments.ts`; production payment status should be written back from webhooks.
+- Clerk handles email-code sign-in and sign-up.
+- Convex is present with a simple unauthenticated `hello` query.
+- Authenticated Convex calls are deferred until the Clerk session flow is working.
 
 ## Setup
 
@@ -18,53 +17,65 @@ React Native + Expo starter for a math tutoring app with Clerk auth, Convex stor
    bun install
    ```
 
-2. Create Clerk and Convex projects.
+2. Create a Clerk application.
 
-3. Copy `.env.example` to `.env` and fill in:
+3. In Clerk, enable email-code authentication and public sign-ups.
 
-   ```sh
-   EXPO_PUBLIC_CONVEX_URL=
-   EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=
-   CLERK_JWT_ISSUER_DOMAIN=
-   ```
-
-4. Configure Clerk with a Convex JWT template named `convex`, then set the issuer domain in Convex.
-
-5. Configure Convex and generate types:
+4. Copy `.env.example` to `.env` and set:
 
    ```sh
-   bunx convex dev --once
+   EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
    ```
 
-6. Run Expo:
+5. Start Expo manually:
 
    ```sh
    bun start
    ```
 
-## Video Flow
+Agents should not start long-running dev servers in this repo.
 
-1. Call `lessons.generateVideoUploadUrl` from an admin screen or script.
-2. Upload the video file to the returned URL.
-3. Save the returned storage id with `lessons.createLesson`.
-4. Publish the lesson with `lessons.publishLesson`.
-5. The mobile app calls `lessons.listPublishedLessons` and Convex returns playable video URLs.
+## Clerk Flow
 
-## Payments
+The app uses a custom React Native flow:
 
-`convex/payments.ts` is intentionally a placeholder. The production shape should be:
+1. Signed-out user taps `Sign in`.
+2. User enters an email address.
+3. Clerk sends a one-time code.
+4. User enters the code.
+5. Existing users are signed in.
+6. New users are created and signed in.
+7. Signed-in users see their email and a sign-out button.
 
-- Start checkout from the app.
-- Complete payment through Clerk Billing or another payment provider.
-- Handle webhooks in Convex HTTP actions.
-- Upsert `subscriptions` by Clerk user id.
-- Gate premium lessons by subscription status.
+## Convex Auth Later
+
+Do not add Convex auth until the basic Clerk flow works.
+
+When authenticated Convex calls are needed:
+
+1. Create a Clerk JWT template named `convex`.
+2. Add `convex/auth.config.ts`:
+
+   ```ts
+   export default {
+     providers: [
+       {
+         domain: process.env.CLERK_JWT_ISSUER_DOMAIN,
+         applicationID: "convex",
+       },
+     ],
+   };
+   ```
+
+3. Set `CLERK_JWT_ISSUER_DOMAIN` in the Convex dashboard.
+4. Wrap the app with `ConvexProviderWithClerk`.
+5. In Convex functions, derive identity with `ctx.auth.getUserIdentity()` and use `identity.tokenIdentifier` for ownership keys.
 
 ## Useful Commands
 
 ```sh
 bun run check
+bun run test
+bun run test:all
 bun run convex:codegen
 ```
-
-Agents should not start long-running dev servers in this repo. Run `bunx convex dev` and `bun start` yourself when you are ready to connect local services.

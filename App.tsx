@@ -1,25 +1,407 @@
+import {
+  ClerkProvider,
+  SignedIn,
+  SignedOut,
+  useAuth,
+  useSignIn,
+  useSignUp,
+  useUser,
+} from "@clerk/clerk-expo";
+import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
-import { StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+
+const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
+const tokenCache = {
+  async getToken(key: string) {
+    return SecureStore.getItemAsync(key);
+  },
+  async saveToken(key: string, value: string) {
+    return SecureStore.setItemAsync(key, value);
+  },
+};
+
+type AuthStep = "intro" | "email" | "code";
+type PendingFlow = "signIn" | "signUp";
 
 export default function App() {
+  if (!publishableKey) {
+    return <SetupScreen />;
+  }
+
+  return (
+    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+      <AppContent />
+    </ClerkProvider>
+  );
+}
+
+function AppContent() {
+  return (
+    <SafeAreaView style={styles.screen}>
+      <StatusBar style="dark" />
+      <SignedIn>
+        <SignedInHome />
+      </SignedIn>
+      <SignedOut>
+        <EmailCodeAuth />
+      </SignedOut>
+    </SafeAreaView>
+  );
+}
+
+function SetupScreen() {
+  return (
+    <SafeAreaView style={styles.screen}>
+      <StatusBar style="dark" />
+      <View style={styles.container}>
+        <Text style={styles.title}>Clerk setup needed</Text>
+        <Text style={styles.body}>
+          Add EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY to your .env file, then restart Expo.
+        </Text>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function EmailCodeAuth() {
+  const { isLoaded: isSignInLoaded, signIn, setActive } = useSignIn();
+  const { isLoaded: isSignUpLoaded, signUp } = useSignUp();
+  const [step, setStep] = useState<AuthStep>("intro");
+  const [pendingFlow, setPendingFlow] = useState<PendingFlow | null>(null);
+  const [emailAddress, setEmailAddress] = useState("");
+  const [code, setCode] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const isLoaded = isSignInLoaded && isSignUpLoaded;
+
+  const handleEmailSubmit = async () => {
+    const trimmedEmail = emailAddress.trim();
+
+    if (!trimmedEmail) {
+      setErrorMessage("Enter your email address.");
+      return;
+    }
+
+    if (!isLoaded || !signIn || !signUp) {
+      setErrorMessage("Clerk is still loading. Please try again.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      await signIn.create({
+        identifier: trimmedEmail,
+        strategy: "email_code",
+      });
+      setPendingFlow("signIn");
+      setStep("code");
+      return;
+    } catch (error) {
+      if (!isMissingAccountError(error)) {
+        setErrorMessage(getErrorMessage(error));
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    try {
+      await signUp.create({
+        emailAddress: trimmedEmail,
+      });
+      await signUp.prepareEmailAddressVerification({
+        strategy: "email_code",
+      });
+      setPendingFlow("signUp");
+      setStep("code");
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCodeSubmit = async () => {
+    const trimmedCode = code.trim();
+
+    if (!trimmedCode) {
+      setErrorMessage("Enter the code from your email.");
+      return;
+    }
+
+    if (!isLoaded || !signIn || !signUp || !setActive || !pendingFlow) {
+      setErrorMessage("The sign-in flow is not ready. Please start again.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      if (pendingFlow === "signIn") {
+        const result = await signIn.attemptFirstFactor({
+          strategy: "email_code",
+          code: trimmedCode,
+        });
+
+        if (result.status === "complete" && result.createdSessionId) {
+          await setActive({ session: result.createdSessionId });
+          return;
+        }
+      } else {
+        const result = await signUp.attemptEmailAddressVerification({
+          code: trimmedCode,
+        });
+
+        if (result.status === "complete" && result.createdSessionId) {
+          await setActive({ session: result.createdSessionId });
+          return;
+        }
+      }
+
+      setErrorMessage("Additional verification is required. We will support that flow later.");
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const goBackToEmail = () => {
+    setStep("email");
+    setCode("");
+    setPendingFlow(null);
+    setErrorMessage(null);
+  };
+
+  if (!isLoaded) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator />
+        <Text style={styles.body}>Loading authentication...</Text>
+      </View>
+    );
+  }
+
+  if (step === "intro") {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Let's Learn Math</Text>
+        <Text style={styles.body}>Sign in with your email to continue.</Text>
+        <Pressable style={styles.primaryButton} onPress={() => setStep("email")}>
+          <Text style={styles.primaryButtonText}>Sign in</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Hello world</Text>
-      <StatusBar style="auto" />
+      <Text style={styles.title}>{step === "email" ? "Enter your email" : "Check your email"}</Text>
+      <Text style={styles.body}>
+        {step === "email"
+          ? "We will send you a one-time sign-in code."
+          : `Enter the code sent to ${emailAddress.trim()}.`}
+      </Text>
+
+      {step === "email" ? (
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!isSubmitting}
+          keyboardType="email-address"
+          onChangeText={setEmailAddress}
+          placeholder="you@example.com"
+          style={styles.input}
+          textContentType="emailAddress"
+          value={emailAddress}
+        />
+      ) : (
+        <TextInput
+          autoCapitalize="none"
+          editable={!isSubmitting}
+          keyboardType="number-pad"
+          onChangeText={setCode}
+          placeholder="123456"
+          style={styles.input}
+          textContentType="oneTimeCode"
+          value={code}
+        />
+      )}
+
+      {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+
+      <Pressable
+        disabled={isSubmitting}
+        style={[styles.primaryButton, isSubmitting && styles.disabledButton]}
+        onPress={step === "email" ? handleEmailSubmit : handleCodeSubmit}
+      >
+        <Text style={styles.primaryButtonText}>{isSubmitting ? "Please wait..." : "Continue"}</Text>
+      </Pressable>
+
+      {step === "code" ? (
+        <Pressable disabled={isSubmitting} style={styles.textButton} onPress={goBackToEmail}>
+          <Text style={styles.textButtonText}>Use a different email</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
 
+function SignedInHome() {
+  const { signOut } = useAuth();
+  const { user } = useUser();
+  const primaryEmail = user?.primaryEmailAddress?.emailAddress ?? "your account";
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>You're signed in</Text>
+      <Text style={styles.body}>Signed in as {primaryEmail}</Text>
+      <Pressable style={styles.secondaryButton} onPress={() => signOut()}>
+        <Text style={styles.secondaryButtonText}>Sign out</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function getErrorMessage(error: unknown) {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "errors" in error &&
+    Array.isArray(error.errors)
+  ) {
+    const firstError = error.errors[0];
+    if (
+      typeof firstError === "object" &&
+      firstError !== null &&
+      "message" in firstError &&
+      typeof firstError.message === "string"
+    ) {
+      return firstError.message;
+    }
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "Something went wrong. Please try again.";
+}
+
+function isMissingAccountError(error: unknown) {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "errors" in error &&
+    Array.isArray(error.errors)
+  ) {
+    return error.errors.some((clerkError: unknown) => {
+      if (typeof clerkError !== "object" || clerkError === null || !("code" in clerkError)) {
+        return false;
+      }
+
+      return (
+        clerkError.code === "form_identifier_not_found" ||
+        clerkError.code === "form_param_format_invalid"
+      );
+    });
+  }
+
+  return false;
+}
+
 const styles = StyleSheet.create({
-  container: {
-    alignItems: "center",
+  screen: {
     backgroundColor: "#ffffff",
     flex: 1,
+  },
+  container: {
+    alignItems: "stretch",
+    flex: 1,
     justifyContent: "center",
+    padding: 24,
   },
   title: {
     color: "#111827",
     fontSize: 28,
+    fontWeight: "800",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  body: {
+    color: "#4b5563",
+    fontSize: 16,
+    lineHeight: 24,
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  input: {
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    borderWidth: 1,
+    color: "#111827",
+    fontSize: 16,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  primaryButton: {
+    alignItems: "center",
+    backgroundColor: "#2563eb",
+    borderRadius: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  primaryButtonText: {
+    color: "#ffffff",
+    fontSize: 16,
     fontWeight: "700",
+  },
+  secondaryButton: {
+    alignItems: "center",
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  secondaryButtonText: {
+    color: "#111827",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  textButton: {
+    alignItems: "center",
+    marginTop: 16,
+    paddingVertical: 8,
+  },
+  textButtonText: {
+    color: "#2563eb",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  error: {
+    color: "#b91c1c",
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+    textAlign: "center",
   },
 });
