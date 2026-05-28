@@ -68,6 +68,19 @@ export const firstGradeUnits: FirstGradeUnit[] = [
         choices: ["3", "4", "5"],
         visualNumbers: [6, 4],
       },
+      {
+        id: "make-ten-8-2",
+        unitId: "making-ten",
+        title: "8 and 2 make 10",
+        concept: "Making ten",
+        explanation: "Count the empty spaces to find the missing part.",
+        visualModel: "ten_frame",
+        masteryTarget: 80,
+        prompt: "There are 8 dots. How many more make 10?",
+        correctAnswer: "2",
+        choices: ["1", "2", "3"],
+        visualNumbers: [8, 2],
+      },
     ],
   },
   {
@@ -303,6 +316,47 @@ export function getLessonExamples(lesson: FirstGradeLesson): LessonExample[] {
   const [first = 0, second = 0] = lesson.visualNumbers;
 
   if (lesson.visualModel === "ten_frame") {
+    if (lesson.unitId === "making-ten" && lesson.id === "make-ten-7-3") {
+      return [
+        {
+          id: `${lesson.id}-example-1`,
+          explanation: "Start with 1 dot.",
+          visualNumbers: [1],
+        },
+        {
+          id: `${lesson.id}-example-2`,
+          explanation:
+            "Add 9 more dots to fill the ten frame. 1 and 9 make 10.",
+          visualNumbers: [1, 9],
+        },
+        {
+          id: `${lesson.id}-example-3`,
+          explanation: "2 and 8 make 10.",
+          visualNumbers: [2],
+        },
+      ];
+    }
+
+    if (lesson.unitId === "making-ten" && lesson.id === "make-ten-6-4") {
+      return [
+        {
+          id: `${lesson.id}-example-1`,
+          explanation: "3 and 7 make 10.",
+          visualNumbers: [3],
+        },
+        {
+          id: `${lesson.id}-example-2`,
+          explanation: "4 and 6 make 10.",
+          visualNumbers: [4],
+        },
+        {
+          id: `${lesson.id}-example-3`,
+          explanation: "5 and 5 make 10.",
+          visualNumbers: [5],
+        },
+      ];
+    }
+
     return [
       {
         id: `${lesson.id}-example-1`,

@@ -15,7 +15,7 @@ describe("findCurriculumQuestion", () => {
       gradeLevel: 1,
       unitId: "making-ten",
       lessonId: "making-ten",
-      activityId: "making-ten-practice-1-1",
+      activityId: "making-ten-practice-1",
     });
 
     expect(question?.correctAnswer).toBe("3");
@@ -27,7 +27,7 @@ describe("findCurriculumQuestion", () => {
         gradeLevel: 1,
         unitId: "making-ten",
         lessonId: "other",
-        activityId: "making-ten-practice-1-1",
+        activityId: "making-ten-practice-1",
       }),
     ).toBeNull();
   });

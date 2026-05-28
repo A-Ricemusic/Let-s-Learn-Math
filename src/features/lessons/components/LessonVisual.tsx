@@ -11,12 +11,17 @@ export function LessonVisual({
 }) {
   if (model === "ten_frame") {
     const filled = numbers[0] ?? 0;
+    const added = numbers[1] ?? 0;
     return (
       <View style={styles.tenFrame}>
         {Array.from({ length: 10 }, (_, index) => (
           <View
             key={index}
-            style={[styles.tenCell, index < filled && styles.tenCellFilled]}
+            style={[
+              styles.tenCell,
+              index < filled && styles.tenCellFilled,
+              index >= filled && index < filled + added && styles.tenCellAdded,
+            ]}
           />
         ))}
       </View>

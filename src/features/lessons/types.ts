@@ -48,9 +48,7 @@ export type CurriculumSection = {
 };
 
 export type SectionPlan = {
-  examples: Array<{
-    example: SectionExample;
-    practice: SectionQuestion[];
-  }>;
+  examples: SectionExample[];
+  practice: SectionQuestion[];
   quiz: SectionQuestion[];
 };

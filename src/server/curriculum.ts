@@ -53,12 +53,8 @@ export function findCurriculumQuestion({
   }
 
   const sectionPlan = buildSectionPlan(section);
-  const practiceQuestions = sectionPlan.examples.flatMap((exampleGroup) =>
-    exampleGroup.practice.map((question) => question),
-  );
-
   return (
-    practiceQuestions.find((question) => question.id === activityId) ??
+    sectionPlan.practice.find((question) => question.id === activityId) ??
     sectionPlan.quiz.find((question) => question.id === activityId) ??
     null
   );

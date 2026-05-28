@@ -15,14 +15,12 @@ export function buildSectionPlan(section: CurriculumSection): SectionPlan {
         visualNumbers: example.visualNumbers,
       })),
     )
-    .slice(0, 3);
+    .slice(0, section.id === "making-ten" ? 6 : 3);
   const filledExamples = fillExamples(section, examples);
 
   return {
-    examples: filledExamples.map((example, index) => ({
-      example,
-      practice: buildQuestions(section, `practice-${index + 1}`, 3),
-    })),
+    examples: filledExamples,
+    practice: buildQuestions(section, "practice", 3),
     quiz: buildQuestions(section, "quiz", 5),
   };
 }
@@ -32,12 +30,9 @@ export function findQuestionInSectionPlan(
   questionId: string,
 ) {
   const plan = buildSectionPlan(section);
-  const practiceQuestions = plan.examples.flatMap((exampleGroup) =>
-    exampleGroup.practice.map((question) => question),
-  );
 
   return (
-    practiceQuestions.find((question) => question.id === questionId) ??
+    plan.practice.find((question) => question.id === questionId) ??
     plan.quiz.find((question) => question.id === questionId) ??
     null
   );
@@ -47,7 +42,9 @@ function fillExamples(
   section: CurriculumSection,
   examples: SectionExample[],
 ): SectionExample[] {
-  if (examples.length >= 3) {
+  const targetCount = section.id === "making-ten" ? 6 : 3;
+
+  if (examples.length >= targetCount) {
     return examples;
   }
 
@@ -57,7 +54,7 @@ function fillExamples(
   }
 
   const filled = [...examples];
-  while (filled.length < 3) {
+  while (filled.length < targetCount) {
     filled.push({
       id: `${section.id}-extra-example-${filled.length + 1}`,
       explanation: firstLesson.title,
@@ -87,7 +84,10 @@ function buildQuestions(
       choices: lesson.choices,
       correctAnswer: lesson.correctAnswer,
       visualModel: lesson.visualModel,
-      visualNumbers: lesson.visualNumbers,
+      visualNumbers:
+        lesson.visualModel === "ten_frame"
+          ? lesson.visualNumbers.slice(0, 1)
+          : lesson.visualNumbers,
     };
   });
 }

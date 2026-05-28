@@ -27,18 +27,18 @@ const section: CurriculumSection = {
 };
 
 describe("buildSectionPlan", () => {
-  test("builds three example groups and a five question quiz", () => {
+  test("builds making ten steps, three practice questions, and a five question quiz", () => {
     const plan = buildSectionPlan(section);
 
-    expect(plan.examples).toHaveLength(3);
-    expect(plan.examples[0]?.practice).toHaveLength(3);
+    expect(plan.examples).toHaveLength(6);
+    expect(plan.practice).toHaveLength(3);
     expect(plan.quiz).toHaveLength(5);
   });
 
   test("uses stable generated question ids", () => {
     const plan = buildSectionPlan(section);
 
-    expect(plan.examples[0]?.practice[0]?.id).toBe("making-ten-practice-1-1");
+    expect(plan.practice[0]?.id).toBe("making-ten-practice-1");
     expect(plan.quiz[0]?.id).toBe("making-ten-quiz-1");
   });
 });
@@ -47,6 +47,10 @@ describe("findQuestionInSectionPlan", () => {
   test("finds generated practice and quiz questions", () => {
     expect(
       findQuestionInSectionPlan(section, "making-ten-practice-1-1")
+        ?.correctAnswer,
+    ).toBeUndefined();
+    expect(
+      findQuestionInSectionPlan(section, "making-ten-practice-1")
         ?.correctAnswer,
     ).toBe("3");
     expect(
