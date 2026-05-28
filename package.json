@@ -6,7 +6,7 @@
     "@clerk/clerk-expo": "^2.19.31",
     "convex": "^1.39.1",
     "effect": "^3.21.2",
-    "expo": "~56.0.5",
+    "expo": "~56.0.6",
     "expo-secure-store": "^56.0.4",
     "expo-status-bar": "~56.0.4",
     "expo-video": "^56.1.2",
