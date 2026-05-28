@@ -12,6 +12,7 @@ import type * as curriculum from "../curriculum.js";
 import type * as firstGradeCurriculum from "../firstGradeCurriculum.js";
 import type * as games from "../games.js";
 import type * as hello from "../hello.js";
+import type * as lib_auth from "../lib/auth.js";
 import type * as sync from "../sync.js";
 
 import type {
@@ -25,6 +26,7 @@ declare const fullApi: ApiFromModules<{
   firstGradeCurriculum: typeof firstGradeCurriculum;
   games: typeof games;
   hello: typeof hello;
+  "lib/auth": typeof lib_auth;
   sync: typeof sync;
 }>;
 

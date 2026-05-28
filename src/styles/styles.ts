@@ -337,6 +337,7 @@ export const styles = StyleSheet.create({
     backgroundColor: "#ecfeff",
     flex: 1,
     padding: 18,
+    paddingBottom: 118,
   },
   gameHud: {
     flexDirection: "row",

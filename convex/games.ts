@@ -1,13 +1,12 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import {
-  ensureLearnerProfile,
-  getAuthenticatedIdentity,
-} from "../src/server/auth";
+import { ensureLearnerProfile, getAuthenticatedIdentity } from "./lib/auth";
 import type { Doc } from "./_generated/dataModel";
 
 const MAKE_TEN_GAME_ID = "make-ten";
 const MAX_RECENT_RUNS = 10;
+const MAX_GAME_SCORE = 10000;
+const MAX_GAME_DURATION_SECONDS = 60 * 60;
 
 function toGameRunSummary(row: Doc<"gameRuns">) {
   return {
@@ -23,6 +22,24 @@ function assertSupportedGame(gameId: string) {
   if (gameId !== MAKE_TEN_GAME_ID) {
     throw new Error("Game not found");
   }
+}
+
+function clampWholeNumber({
+  maximum,
+  minimum,
+  name,
+  value,
+}: {
+  maximum: number;
+  minimum: number;
+  name: string;
+  value: number;
+}) {
+  if (!Number.isFinite(value)) {
+    throw new Error(`${name} must be a finite number`);
+  }
+
+  return Math.min(maximum, Math.max(minimum, Math.floor(value)));
 }
 
 export const myGameStats = query({
@@ -69,8 +86,18 @@ export const recordGameRun = mutation({
     const identity = await getAuthenticatedIdentity(ctx);
     await ensureLearnerProfile(ctx, identity);
     const completedAt = Date.now();
-    const score = Math.max(0, Math.floor(args.score));
-    const durationSeconds = Math.max(1, Math.floor(args.durationSeconds));
+    const score = clampWholeNumber({
+      maximum: MAX_GAME_SCORE,
+      minimum: 0,
+      name: "score",
+      value: args.score,
+    });
+    const durationSeconds = clampWholeNumber({
+      maximum: MAX_GAME_DURATION_SECONDS,
+      minimum: 1,
+      name: "durationSeconds",
+      value: args.durationSeconds,
+    });
 
     await ctx.db.insert("gameRuns", {
       tokenIdentifier: identity.tokenIdentifier,

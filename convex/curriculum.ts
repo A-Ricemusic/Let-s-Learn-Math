@@ -1,16 +1,17 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { calculateLessonMastery } from "../src/features/lessons/mastery";
-import {
-  ensureLearnerProfile,
-  getAuthenticatedIdentity,
-} from "../src/server/auth";
+import { ensureLearnerProfile, getAuthenticatedIdentity } from "./lib/auth";
 import {
   findCurriculumQuestion,
   getGradeUnits,
   gradeOptions,
 } from "../src/server/curriculum";
 import type { Doc } from "./_generated/dataModel";
+
+const MIN_GRADE_LEVEL = 1;
+const MAX_GRADE_LEVEL = 12;
+const MAX_PROGRESS_ROWS = 100;
 
 function toProgressSummary(row: Doc<"lessonProgress">) {
   return {
@@ -22,6 +23,16 @@ function toProgressSummary(row: Doc<"lessonProgress">) {
     masteryScore: row.masteryScore,
     lastPracticedAt: row.lastPracticedAt,
   };
+}
+
+function assertGradeLevel(gradeLevel: number) {
+  if (
+    !Number.isInteger(gradeLevel) ||
+    gradeLevel < MIN_GRADE_LEVEL ||
+    gradeLevel > MAX_GRADE_LEVEL
+  ) {
+    throw new Error("Grade not found");
+  }
 }
 
 export const firstGrade = query({
@@ -49,6 +60,7 @@ export const byGrade = query({
     gradeLevel: v.number(),
   },
   handler: async (_ctx, args) => {
+    assertGradeLevel(args.gradeLevel);
     const grade = gradeOptions.find(
       (option) => option.gradeLevel === args.gradeLevel,
     );
@@ -74,6 +86,7 @@ export const myProgressByGrade = query({
     gradeLevel: v.number(),
   },
   handler: async (ctx, args) => {
+    assertGradeLevel(args.gradeLevel);
     const identity = await getAuthenticatedIdentity(ctx);
     const rows = await ctx.db
       .query("lessonProgress")
@@ -82,7 +95,7 @@ export const myProgressByGrade = query({
           .eq("tokenIdentifier", identity.tokenIdentifier)
           .eq("gradeLevel", args.gradeLevel),
       )
-      .take(100);
+      .take(MAX_PROGRESS_ROWS);
 
     return rows.map(toProgressSummary);
   },
@@ -97,7 +110,7 @@ export const myFirstGradeProgress = query({
       .withIndex("by_tokenIdentifier_and_gradeLevel", (q) =>
         q.eq("tokenIdentifier", identity.tokenIdentifier).eq("gradeLevel", 1),
       )
-      .take(100);
+      .take(MAX_PROGRESS_ROWS);
 
     return rows.map(toProgressSummary);
   },
@@ -112,6 +125,7 @@ export const recordActivityAttempt = mutation({
     selectedAnswer: v.string(),
   },
   handler: async (ctx, args) => {
+    assertGradeLevel(args.gradeLevel);
     const identity = await getAuthenticatedIdentity(ctx);
     await ensureLearnerProfile(ctx, identity);
     const question = findCurriculumQuestion({
@@ -140,9 +154,10 @@ export const recordActivityAttempt = mutation({
 
     const existing = await ctx.db
       .query("lessonProgress")
-      .withIndex("by_tokenIdentifier_and_lessonId", (q) =>
+      .withIndex("by_tokenIdentifier_and_gradeLevel_and_lessonId", (q) =>
         q
           .eq("tokenIdentifier", identity.tokenIdentifier)
+          .eq("gradeLevel", args.gradeLevel)
           .eq("lessonId", args.lessonId),
       )
       .unique();
@@ -170,6 +185,7 @@ export const recordActivityAttempt = mutation({
       });
     } else {
       await ctx.db.patch(existing._id, {
+        gradeLevel: args.gradeLevel,
         unitId: args.unitId,
         status,
         correctCount,

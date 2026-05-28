@@ -36,7 +36,11 @@ export default defineSchema({
       "tokenIdentifier",
       "gradeLevel",
     ])
-    .index("by_tokenIdentifier_and_lessonId", ["tokenIdentifier", "lessonId"]),
+    .index("by_tokenIdentifier_and_gradeLevel_and_lessonId", [
+      "tokenIdentifier",
+      "gradeLevel",
+      "lessonId",
+    ]),
   activityAttempts: defineTable({
     tokenIdentifier: v.string(),
     gradeLevel: v.number(),

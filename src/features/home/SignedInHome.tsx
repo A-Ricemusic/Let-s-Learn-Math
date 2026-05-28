@@ -165,6 +165,32 @@ export function SignedInHome() {
     setLessonError(null);
   };
 
+  const showGames = () => {
+    setSelectedMode("games");
+    setSelectedGame(null);
+    setSelectedSectionId(null);
+    setSelectedAnswers({});
+    setLessonError(null);
+  };
+
+  const showProfile = () => {
+    setSelectedMode("profile");
+    setSelectedGame(null);
+    setSelectedSectionId(null);
+    setSelectedAnswers({});
+    setLessonError(null);
+  };
+
+  const bottomNavigation = (
+    <BottomNav
+      selectedMode={selectedMode}
+      showGames={showGames}
+      showGrades={showGrades}
+      showProfile={showProfile}
+      showTopics={showTopics}
+    />
+  );
+
   if (isLoading || grades === undefined) {
     return (
       <View style={styles.container}>
@@ -184,7 +210,9 @@ export function SignedInHome() {
   }
 
   if (selectedGame === "make-ten") {
-    return <MakeTenGame onExit={() => setSelectedGame(null)} />;
+    return (
+      <MakeTenGame bottomNavigation={bottomNavigation} onExit={showGames} />
+    );
   }
 
   return (
@@ -530,38 +558,50 @@ export function SignedInHome() {
         ) : null}
       </ScrollView>
 
-      <View style={styles.bottomNav}>
-        <NavTab
-          active={selectedMode === "topics"}
-          icon="○"
-          label="Topics"
-          onPress={showTopics}
-        />
-        <NavTab
-          active={selectedMode === "grades"}
-          icon="△"
-          label="Grades"
-          onPress={showGrades}
-        />
-        <NavTab
-          active={selectedMode === "games"}
-          icon="□"
-          label="Games"
-          onPress={() => {
-            setSelectedMode("games");
-            setSelectedGame(null);
-          }}
-        />
-        <NavTab
-          active={selectedMode === "profile"}
-          icon="◔"
-          label="Profile"
-          onPress={() => {
-            setSelectedMode("profile");
-            setSelectedGame(null);
-          }}
-        />
-      </View>
+      {bottomNavigation}
+    </View>
+  );
+}
+
+function BottomNav({
+  selectedMode,
+  showGames,
+  showGrades,
+  showProfile,
+  showTopics,
+}: {
+  selectedMode: HomeMode;
+  showGames: () => void;
+  showGrades: () => void;
+  showProfile: () => void;
+  showTopics: () => void;
+}) {
+  return (
+    <View style={styles.bottomNav}>
+      <NavTab
+        active={selectedMode === "topics"}
+        icon="○"
+        label="Topics"
+        onPress={showTopics}
+      />
+      <NavTab
+        active={selectedMode === "grades"}
+        icon="△"
+        label="Grades"
+        onPress={showGrades}
+      />
+      <NavTab
+        active={selectedMode === "games"}
+        icon="□"
+        label="Games"
+        onPress={showGames}
+      />
+      <NavTab
+        active={selectedMode === "profile"}
+        icon="◔"
+        label="Profile"
+        onPress={showProfile}
+      />
     </View>
   );
 }

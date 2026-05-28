@@ -1,4 +1,5 @@
 import { useMutation } from "convex/react";
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, Pressable, Text, View } from "react-native";
 import { api } from "../../../convex/_generated/api";
@@ -9,6 +10,7 @@ const ROUND_SECONDS = 120;
 const ANSWER_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 
 type MakeTenGameProps = {
+  readonly bottomNavigation: ReactNode;
   readonly onExit: () => void;
 };
 
@@ -26,7 +28,7 @@ function formatClock(seconds: number) {
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 }
 
-export function MakeTenGame({ onExit }: MakeTenGameProps) {
+export function MakeTenGame({ bottomNavigation, onExit }: MakeTenGameProps) {
   const recordGameRun = useMutation(api.games.recordGameRun);
   const [leftNumber, setLeftNumber] = useState(() => buildQuestion(null));
   const [score, setScore] = useState(0);
@@ -208,6 +210,7 @@ export function MakeTenGame({ onExit }: MakeTenGameProps) {
           </View>
         </>
       )}
+      {bottomNavigation}
     </View>
   );
 }

@@ -1,8 +1,5 @@
 import { mutation, query } from "./_generated/server";
-import {
-  getAuthenticatedIdentity,
-  optionalAuthString,
-} from "../src/server/auth";
+import { getAuthenticatedIdentity, optionalAuthString } from "./lib/auth";
 
 export const current = query({
   args: {},

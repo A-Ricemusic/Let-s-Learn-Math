@@ -1,5 +1,5 @@
 import type { UserIdentity } from "convex/server";
-import type { MutationCtx, QueryCtx } from "../../convex/_generated/server";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 
 export async function getAuthenticatedIdentity(ctx: QueryCtx | MutationCtx) {
   const identity = await ctx.auth.getUserIdentity();
