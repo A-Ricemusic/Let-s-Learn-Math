@@ -116,6 +116,66 @@ export const myFirstGradeProgress = query({
   },
 });
 
+export const myParentProgressReport = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await getAuthenticatedIdentity(ctx);
+    const progressRows = await ctx.db
+      .query("lessonProgress")
+      .withIndex("by_tokenIdentifier", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier),
+      )
+      .take(MAX_PROGRESS_ROWS);
+    const attemptRows = await ctx.db
+      .query("activityAttempts")
+      .withIndex("by_tokenIdentifier_and_createdAt", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier),
+      )
+      .order("desc")
+      .take(MAX_PROGRESS_ROWS);
+
+    return gradeOptions.map((grade) => {
+      const units = getGradeUnits(grade.gradeLevel);
+      const lessonReports = units.map((unit) => {
+        const progress = progressRows.find(
+          (row) =>
+            row.gradeLevel === grade.gradeLevel && row.lessonId === unit.id,
+        );
+
+        return {
+          lessonId: unit.id,
+          title: unit.title,
+          goal: unit.goal,
+          status: progress?.status ?? "not_started",
+          correctCount: progress?.correctCount ?? 0,
+          attemptCount: progress?.attemptCount ?? 0,
+          masteryScore: progress?.masteryScore ?? 0,
+          lastPracticedAt: progress?.lastPracticedAt ?? null,
+        };
+      });
+      const gradeAttempts = attemptRows.filter(
+        (row) => row.gradeLevel === grade.gradeLevel,
+      );
+      const correctAttempts = gradeAttempts.filter(
+        (row) => row.isCorrect,
+      ).length;
+      const masteredLessons = lessonReports.filter(
+        (lesson) => lesson.status === "mastered",
+      ).length;
+
+      return {
+        gradeLevel: grade.gradeLevel,
+        title: grade.title,
+        lessonCount: lessonReports.length,
+        masteredLessons,
+        totalAttempts: gradeAttempts.length,
+        correctAttempts,
+        lessonReports,
+      };
+    });
+  },
+});
+
 export const recordActivityAttempt = mutation({
   args: {
     gradeLevel: v.number(),

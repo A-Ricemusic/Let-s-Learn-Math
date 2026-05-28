@@ -21,6 +21,7 @@ import type { SectionQuestion } from "../lessons/types";
 
 type HomeMode = "topics" | "grades" | "games" | "profile";
 type GameScreen = "make-ten";
+type ProfilePage = "summary" | "parent-report";
 
 const FLOATING_MATH_SYMBOLS = ["+", "5", "=", "8", "x", "2"];
 
@@ -29,21 +30,26 @@ export function SignedInHome() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { user } = useUser();
   const grades = useQuery(api.curriculum.grades, isAuthenticated ? {} : "skip");
+  const activeGradeLevel = selectedGradeLevel ?? grades?.[0]?.gradeLevel ?? null;
   const [selectedMode, setSelectedMode] = useState<HomeMode>("topics");
   const [selectedGradeLevel, setSelectedGradeLevel] = useState<number | null>(
     null,
   );
   const curriculum = useQuery(
     api.curriculum.byGrade,
-    isAuthenticated && selectedGradeLevel !== null
-      ? { gradeLevel: selectedGradeLevel }
+    isAuthenticated && activeGradeLevel !== null
+      ? { gradeLevel: activeGradeLevel }
       : "skip",
   );
   const progress = useQuery(
     api.curriculum.myProgressByGrade,
-    isAuthenticated && selectedGradeLevel !== null
-      ? { gradeLevel: selectedGradeLevel }
+    isAuthenticated && activeGradeLevel !== null
+      ? { gradeLevel: activeGradeLevel }
       : "skip",
+  );
+  const parentProgressReport = useQuery(
+    api.curriculum.myParentProgressReport,
+    isAuthenticated ? {} : "skip",
   );
   const makeTenStats = useQuery(
     api.games.myGameStats,
@@ -56,6 +62,7 @@ export function SignedInHome() {
     null,
   );
   const [selectedGame, setSelectedGame] = useState<GameScreen | null>(null);
+  const [profilePage, setProfilePage] = useState<ProfilePage>("summary");
   const [selectedAnswers, setSelectedAnswers] = useState<
     Record<string, string>
   >({});
@@ -97,6 +104,15 @@ export function SignedInHome() {
   const masteredLessons =
     progress?.filter((row) => row.status === "mastered").length ?? 0;
   const totalLessons = sections.length;
+  const progressByLessonId = new Map(
+    progress?.map((row) => [row.lessonId, row]) ?? [],
+  );
+  const completedLessons = sections.filter(
+    (section) => progressByLessonId.get(section.id)?.status === "mastered",
+  );
+  const incompleteLessons = sections.filter(
+    (section) => progressByLessonId.get(section.id)?.status !== "mastered",
+  );
   const sectionPlan = selectedSection
     ? buildSectionPlan(selectedSection)
     : null;
@@ -136,6 +152,7 @@ export function SignedInHome() {
   const showTopics = () => {
     setSelectedMode("topics");
     setSelectedGame(null);
+    setProfilePage("summary");
     setSelectedGradeLevel((currentGradeLevel) => {
       if (currentGradeLevel !== null) {
         return currentGradeLevel;
@@ -151,6 +168,7 @@ export function SignedInHome() {
   const showGrades = () => {
     setSelectedMode("grades");
     setSelectedGame(null);
+    setProfilePage("summary");
     setSelectedSectionId(null);
     setSelectedAnswers({});
     setLessonError(null);
@@ -159,6 +177,7 @@ export function SignedInHome() {
   const chooseGrade = (gradeLevel: number) => {
     setSelectedMode("topics");
     setSelectedGame(null);
+    setProfilePage("summary");
     setSelectedGradeLevel(gradeLevel);
     setSelectedSectionId(null);
     setSelectedAnswers({});
@@ -168,6 +187,7 @@ export function SignedInHome() {
   const showGames = () => {
     setSelectedMode("games");
     setSelectedGame(null);
+    setProfilePage("summary");
     setSelectedSectionId(null);
     setSelectedAnswers({});
     setLessonError(null);
@@ -176,6 +196,7 @@ export function SignedInHome() {
   const showProfile = () => {
     setSelectedMode("profile");
     setSelectedGame(null);
+    setProfilePage("summary");
     setSelectedSectionId(null);
     setSelectedAnswers({});
     setLessonError(null);
@@ -618,7 +639,10 @@ function NavTab({
   onPress: () => void;
 }) {
   return (
-    <Pressable style={styles.navTab} onPress={onPress}>
+    <Pressable
+      style={[styles.navTab, active && styles.navTabActive]}
+      onPress={onPress}
+    >
       <Text style={[styles.navIcon, active && styles.navIconActive]}>
         {icon}
       </Text>
