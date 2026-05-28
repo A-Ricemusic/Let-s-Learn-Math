@@ -3,6 +3,7 @@
 const DEFAULT_DEVICE_NAME = "iPhone 17 Pro";
 const EXPO_GO_BUNDLE_ID = "host.exp.Exponent";
 const EXPO_GO_WARMUP_MS = 3000;
+const expoArgs = Bun.argv.slice(2);
 
 function run(command, args, options = {}) {
   const result = Bun.spawnSync([command, ...args], {
@@ -70,7 +71,7 @@ async function warmUpExpoGo() {
 
 await warmUpExpoGo();
 
-const expo = Bun.spawn(["bun", "x", "expo", "start", "--ios"], {
+const expo = Bun.spawn(["bun", "x", "expo", "start", "--ios", ...expoArgs], {
   stdin: "inherit",
   stdout: "inherit",
   stderr: "inherit",
