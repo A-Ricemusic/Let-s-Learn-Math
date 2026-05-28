@@ -332,7 +332,7 @@ export function getLessonExamples(lesson: FirstGradeLesson): LessonExample[] {
         {
           id: `${lesson.id}-example-3`,
           explanation: "2 and 8 make 10.",
-          visualNumbers: [2],
+          visualNumbers: [2, 8],
         },
       ];
     }
@@ -342,17 +342,17 @@ export function getLessonExamples(lesson: FirstGradeLesson): LessonExample[] {
         {
           id: `${lesson.id}-example-1`,
           explanation: "3 and 7 make 10.",
-          visualNumbers: [3],
+          visualNumbers: [3, 7],
         },
         {
           id: `${lesson.id}-example-2`,
           explanation: "4 and 6 make 10.",
-          visualNumbers: [4],
+          visualNumbers: [4, 6],
         },
         {
           id: `${lesson.id}-example-3`,
           explanation: "5 and 5 make 10.",
-          visualNumbers: [5],
+          visualNumbers: [5, 5],
         },
       ];
     }
@@ -371,7 +371,7 @@ export function getLessonExamples(lesson: FirstGradeLesson): LessonExample[] {
       {
         id: `${lesson.id}-example-3`,
         explanation: `${first} and ${10 - first} make 10.`,
-        visualNumbers: [10],
+        visualNumbers: [first, 10 - first],
       },
     ];
   }

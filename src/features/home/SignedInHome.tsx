@@ -4,10 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Easing,
   Pressable,
   ScrollView,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { api } from "../../../convex/_generated/api";
@@ -30,11 +33,12 @@ export function SignedInHome() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { user } = useUser();
   const grades = useQuery(api.curriculum.grades, isAuthenticated ? {} : "skip");
-  const activeGradeLevel = selectedGradeLevel ?? grades?.[0]?.gradeLevel ?? null;
   const [selectedMode, setSelectedMode] = useState<HomeMode>("topics");
   const [selectedGradeLevel, setSelectedGradeLevel] = useState<number | null>(
     null,
   );
+  const activeGradeLevel =
+    selectedGradeLevel ?? grades?.[0]?.gradeLevel ?? null;
   const curriculum = useQuery(
     api.curriculum.byGrade,
     isAuthenticated && activeGradeLevel !== null
@@ -68,7 +72,9 @@ export function SignedInHome() {
   >({});
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
   const [lessonError, setLessonError] = useState<string | null>(null);
+  const [lessonSlideIndex, setLessonSlideIndex] = useState(0);
   const floatAnimation = useRef(new Animated.Value(0)).current;
+  const { width: windowWidth } = useWindowDimensions();
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -116,6 +122,23 @@ export function SignedInHome() {
   const sectionPlan = selectedSection
     ? buildSectionPlan(selectedSection)
     : null;
+  const lessonSlideCount = sectionPlan?.examples.length ?? 0;
+  const hasFinishedLessonSlides =
+    lessonSlideCount > 0 && lessonSlideIndex >= lessonSlideCount - 1;
+  const lessonSlideWidth = Math.max(windowWidth - 64, 280);
+
+  const handleLessonSlideScroll = (
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    if (lessonSlideCount === 0) {
+      return;
+    }
+
+    const nextIndex = Math.round(
+      event.nativeEvent.contentOffset.x / lessonSlideWidth,
+    );
+    setLessonSlideIndex(Math.min(Math.max(nextIndex, 0), lessonSlideCount - 1));
+  };
 
   const handleAnswer = async (question: SectionQuestion, answer: string) => {
     if (
@@ -163,6 +186,7 @@ export function SignedInHome() {
     setSelectedSectionId(null);
     setSelectedAnswers({});
     setLessonError(null);
+    setLessonSlideIndex(0);
   };
 
   const showGrades = () => {
@@ -172,6 +196,7 @@ export function SignedInHome() {
     setSelectedSectionId(null);
     setSelectedAnswers({});
     setLessonError(null);
+    setLessonSlideIndex(0);
   };
 
   const chooseGrade = (gradeLevel: number) => {
@@ -182,6 +207,7 @@ export function SignedInHome() {
     setSelectedSectionId(null);
     setSelectedAnswers({});
     setLessonError(null);
+    setLessonSlideIndex(0);
   };
 
   const showGames = () => {
@@ -191,6 +217,7 @@ export function SignedInHome() {
     setSelectedSectionId(null);
     setSelectedAnswers({});
     setLessonError(null);
+    setLessonSlideIndex(0);
   };
 
   const showProfile = () => {
@@ -200,6 +227,7 @@ export function SignedInHome() {
     setSelectedSectionId(null);
     setSelectedAnswers({});
     setLessonError(null);
+    setLessonSlideIndex(0);
   };
 
   const bottomNavigation = (
@@ -323,35 +351,164 @@ export function SignedInHome() {
           </View>
         ) : null}
 
-        {selectedMode === "profile" ? (
+        {selectedMode === "profile" && profilePage === "summary" ? (
           <View style={styles.profilePanel}>
-            <View style={styles.profileAvatar}>
-              <Text style={styles.profileAvatarText}>
-                {primaryEmail.slice(0, 1).toUpperCase()}
-              </Text>
+            <View style={styles.profileSummaryHeader}>
+              <View style={styles.profileAvatar}>
+                <Text style={styles.profileAvatarText}>
+                  {primaryEmail.slice(0, 1).toUpperCase()}
+                </Text>
+              </View>
+              <View style={styles.profileSummaryCopy}>
+                <Text style={styles.profileName}>
+                  {user?.fullName ?? user?.firstName ?? "Math learner"}
+                </Text>
+                <Text style={styles.profileEmail}>{primaryEmail}</Text>
+              </View>
             </View>
-            <Text style={styles.profileName}>
-              {user?.fullName ?? user?.firstName ?? "Math learner"}
-            </Text>
-            <Text style={styles.profileEmail}>{primaryEmail}</Text>
+
             <View style={styles.profileStatRow}>
               <View style={styles.profileStat}>
                 <Text style={styles.profileStatValue}>
-                  {selectedGradeLevel === null ? "-" : selectedGradeLevel}
+                  {activeGradeLevel ?? "-"}
                 </Text>
                 <Text style={styles.profileStatLabel}>Grade</Text>
               </View>
               <View style={styles.profileStat}>
                 <Text style={styles.profileStatValue}>{masteredLessons}</Text>
-                <Text style={styles.profileStatLabel}>Mastered</Text>
+                <Text style={styles.profileStatLabel}>Completed</Text>
               </View>
               <View style={styles.profileStat}>
-                <Text style={styles.profileStatValue}>{totalLessons}</Text>
-                <Text style={styles.profileStatLabel}>Topics</Text>
+                <Text style={styles.profileStatValue}>
+                  {Math.max(totalLessons - masteredLessons, 0)}
+                </Text>
+                <Text style={styles.profileStatLabel}>Not Done</Text>
               </View>
             </View>
-            <View style={styles.gameStatsPanel}>
-              <Text style={styles.sectionTitle}>Game Stats</Text>
+
+            <View style={styles.profileActionRow}>
+              <Pressable
+                style={styles.profileActionButton}
+                onPress={() => setProfilePage("parent-report")}
+              >
+                <Text style={styles.profileActionTitle}>
+                  Parent Progress Report
+                </Text>
+                <Text style={styles.profileActionText}>
+                  Lessons, quizzes, mastery, and games
+                </Text>
+              </Pressable>
+              <Pressable
+                style={styles.profileActionButton}
+                onPress={showGrades}
+              >
+                <Text style={styles.profileActionTitle}>Change Grade</Text>
+                <Text style={styles.profileActionText}>
+                  Pick a different lesson path
+                </Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.lessonStatusPanel}>
+              <Text style={styles.sectionTitle}>Completed Lessons</Text>
+              {completedLessons.length > 0 ? (
+                completedLessons.map((lesson) => (
+                  <LessonStatusRow
+                    key={lesson.id}
+                    label="Completed"
+                    title={lesson.title}
+                  />
+                ))
+              ) : (
+                <Text style={styles.profileEmptyText}>
+                  No lessons completed yet in this grade.
+                </Text>
+              )}
+            </View>
+
+            <View style={styles.lessonStatusPanel}>
+              <Text style={styles.sectionTitle}>Not Completed</Text>
+              {incompleteLessons.length > 0 ? (
+                incompleteLessons.map((lesson) => {
+                  const lessonProgress = progressByLessonId.get(lesson.id);
+                  return (
+                    <LessonStatusRow
+                      key={lesson.id}
+                      label={
+                        lessonProgress?.status.replace("_", " ") ??
+                        "not started"
+                      }
+                      title={lesson.title}
+                    />
+                  );
+                })
+              ) : (
+                <Text style={styles.profileEmptyText}>
+                  Every lesson in this grade is complete.
+                </Text>
+              )}
+            </View>
+          </View>
+        ) : null}
+
+        {selectedMode === "profile" && profilePage === "parent-report" ? (
+          <View style={styles.reportPanel}>
+            <Pressable
+              style={styles.backButton}
+              onPress={() => setProfilePage("summary")}
+            >
+              <Text style={styles.backButtonText}>Back to profile</Text>
+            </Pressable>
+
+            <Text style={styles.reportTitle}>Parent Progress Report</Text>
+            <Text style={styles.reportSubtitle}>
+              {user?.fullName ?? user?.firstName ?? "Math learner"} is working
+              through grade {activeGradeLevel ?? "-"} math.
+            </Text>
+
+            <View style={styles.reportSection}>
+              <Text style={styles.sectionTitle}>Lesson Rundown</Text>
+              {parentProgressReport === undefined ? (
+                <ActivityIndicator />
+              ) : (
+                parentProgressReport.map((grade) => (
+                  <View key={grade.gradeLevel} style={styles.reportGradeBlock}>
+                    <Text style={styles.reportGradeTitle}>
+                      {grade.title}: {grade.masteredLessons} of{" "}
+                      {grade.lessonCount} complete
+                    </Text>
+                    <Text style={styles.reportMeta}>
+                      {grade.correctAttempts} correct out of{" "}
+                      {grade.totalAttempts} quiz and practice attempts
+                    </Text>
+                    {grade.lessonReports.map((lesson) => (
+                      <View
+                        key={lesson.lessonId}
+                        style={styles.reportLessonRow}
+                      >
+                        <View style={styles.reportLessonCopy}>
+                          <Text style={styles.reportLessonTitle}>
+                            {lesson.title}
+                          </Text>
+                          <Text style={styles.reportMeta}>{lesson.goal}</Text>
+                        </View>
+                        <View style={styles.reportScorePill}>
+                          <Text style={styles.reportScoreText}>
+                            {lesson.masteryScore}%
+                          </Text>
+                          <Text style={styles.reportStatusText}>
+                            {lesson.status.replace("_", " ")}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ))
+              )}
+            </View>
+
+            <View style={styles.reportSection}>
+              <Text style={styles.sectionTitle}>Game Scores</Text>
               <View style={styles.profileStatRow}>
                 <View style={styles.profileStat}>
                   <Text style={styles.profileStatValue}>
@@ -380,8 +537,8 @@ export function SignedInHome() {
                     </View>
                   ))
                 ) : (
-                  <Text style={styles.gameCardText}>
-                    Play Making Tens to start tracking your scores.
+                  <Text style={styles.profileEmptyText}>
+                    No game runs recorded yet.
                   </Text>
                 )}
               </View>
@@ -471,6 +628,7 @@ export function SignedInHome() {
                             setSelectedSectionId(unit.id);
                             setSelectedAnswers({});
                             setLessonError(null);
+                            setLessonSlideIndex(0);
                           }}
                         >
                           <Text style={styles.lessonButtonTitle}>
@@ -482,6 +640,9 @@ export function SignedInHome() {
                           <Text style={styles.lessonButtonMeta}>
                             {unitProgress?.status.replace("_", " ") ??
                               "not started"}
+                          </Text>
+                          <Text style={styles.lessonButtonAction}>
+                            Open lesson
                           </Text>
                         </Pressable>
                       </View>
@@ -496,6 +657,7 @@ export function SignedInHome() {
                       setSelectedSectionId(null);
                       setSelectedAnswers({});
                       setLessonError(null);
+                      setLessonSlideIndex(0);
                     }}
                   >
                     <Text style={styles.backButtonText}>Back to sections</Text>
@@ -512,52 +674,95 @@ export function SignedInHome() {
                       {selectedSection.goal}
                     </Text>
 
-                    <View style={styles.lessonSection}>
-                      {sectionPlan.examples.map((example, exampleIndex) => (
-                        <View key={example.id} style={styles.exampleBlock}>
-                          <Text style={styles.exampleLabel}>
-                            Step {exampleIndex + 1}
-                          </Text>
-                          <Text style={styles.exampleText}>
-                            {example.explanation}
-                          </Text>
-                          <LessonVisual
-                            model={example.visualModel}
-                            numbers={example.visualNumbers}
-                          />
+                    <View style={styles.lessonDeck}>
+                      <ScrollView
+                        horizontal
+                        onMomentumScrollEnd={handleLessonSlideScroll}
+                        pagingEnabled
+                        scrollEventThrottle={16}
+                        showsHorizontalScrollIndicator={false}
+                        snapToInterval={lessonSlideWidth}
+                        snapToAlignment="start"
+                        decelerationRate="fast"
+                      >
+                        {sectionPlan.examples.map((example, exampleIndex) => (
+                          <View
+                            key={example.id}
+                            style={[
+                              styles.lessonSlide,
+                              { width: lessonSlideWidth },
+                            ]}
+                          >
+                            <Text style={styles.exampleLabel}>
+                              Slide {exampleIndex + 1} of {lessonSlideCount}
+                            </Text>
+                            <Text style={styles.exampleText}>
+                              {example.explanation}
+                            </Text>
+                            <LessonVisual
+                              model={example.visualModel}
+                              numbers={example.visualNumbers}
+                            />
+                          </View>
+                        ))}
+                      </ScrollView>
+
+                      <View style={styles.lessonSlideFooter}>
+                        <View style={styles.lessonDots}>
+                          {sectionPlan.examples.map((example, exampleIndex) => (
+                            <View
+                              key={example.id}
+                              style={[
+                                styles.lessonDot,
+                                exampleIndex === lessonSlideIndex &&
+                                  styles.lessonDotActive,
+                              ]}
+                            />
+                          ))}
                         </View>
-                      ))}
+                        <Text style={styles.lessonSlideHint}>
+                          {hasFinishedLessonSlides
+                            ? "Practice is ready below."
+                            : "Swipe to keep going."}
+                        </Text>
+                      </View>
                     </View>
 
-                    <View style={styles.lessonSection}>
-                      <Text style={styles.sectionTitle}>Practice</Text>
-                      {sectionPlan.practice.map((question, practiceIndex) => (
-                        <QuestionBlock
-                          key={question.id}
-                          disabled={isSubmittingAnswer}
-                          index={practiceIndex}
-                          label="Practice"
-                          onAnswer={handleAnswer}
-                          question={question}
-                          selectedAnswer={selectedAnswers[question.id]}
-                        />
-                      ))}
-                    </View>
+                    {hasFinishedLessonSlides ? (
+                      <>
+                        <View style={styles.lessonSection}>
+                          <Text style={styles.sectionTitle}>Practice</Text>
+                          {sectionPlan.practice.map(
+                            (question, practiceIndex) => (
+                              <QuestionBlock
+                                key={question.id}
+                                disabled={isSubmittingAnswer}
+                                index={practiceIndex}
+                                label="Practice"
+                                onAnswer={handleAnswer}
+                                question={question}
+                                selectedAnswer={selectedAnswers[question.id]}
+                              />
+                            ),
+                          )}
+                        </View>
 
-                    <View style={styles.quizSection}>
-                      <Text style={styles.sectionTitle}>Quiz</Text>
-                      {sectionPlan.quiz.map((question, index) => (
-                        <QuestionBlock
-                          key={question.id}
-                          disabled={isSubmittingAnswer}
-                          index={index}
-                          label="Question"
-                          onAnswer={handleAnswer}
-                          question={question}
-                          selectedAnswer={selectedAnswers[question.id]}
-                        />
-                      ))}
-                    </View>
+                        <View style={styles.quizSection}>
+                          <Text style={styles.sectionTitle}>Quiz</Text>
+                          {sectionPlan.quiz.map((question, index) => (
+                            <QuestionBlock
+                              key={question.id}
+                              disabled={isSubmittingAnswer}
+                              index={index}
+                              label="Question"
+                              onAnswer={handleAnswer}
+                              question={question}
+                              selectedAnswer={selectedAnswers[question.id]}
+                            />
+                          ))}
+                        </View>
+                      </>
+                    ) : null}
 
                     {lessonError ? (
                       <Text style={styles.error}>{lessonError}</Text>
@@ -623,6 +828,15 @@ function BottomNav({
         label="Profile"
         onPress={showProfile}
       />
+    </View>
+  );
+}
+
+function LessonStatusRow({ label, title }: { label: string; title: string }) {
+  return (
+    <View style={styles.lessonStatusRow}>
+      <Text style={styles.lessonStatusTitle}>{title}</Text>
+      <Text style={styles.lessonStatusLabel}>{label}</Text>
     </View>
   );
 }
