@@ -16,7 +16,7 @@ import {
 } from "convex/react";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -61,10 +61,13 @@ export default function App() {
 
 function useConvexClerkAuth() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
   const fetchAccessToken = useCallback(
     async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
       try {
-        return await getToken({
+        return await getTokenRef.current({
           template: "convex",
           skipCache: forceRefreshToken,
         });
@@ -72,7 +75,7 @@ function useConvexClerkAuth() {
         return null;
       }
     },
-    [getToken],
+    [],
   );
 
   return useMemo(
