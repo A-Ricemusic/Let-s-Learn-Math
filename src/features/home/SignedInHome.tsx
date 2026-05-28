@@ -20,6 +20,7 @@ import { buildSectionPlan } from "../lessons/plan";
 import type { SectionQuestion } from "../lessons/types";
 
 type HomeMode = "topics" | "grades" | "games" | "profile";
+type GameScreen = "make-ten";
 
 const FLOATING_MATH_SYMBOLS = ["+", "5", "=", "8", "x", "2"];
 
@@ -44,12 +45,17 @@ export function SignedInHome() {
       ? { gradeLevel: selectedGradeLevel }
       : "skip",
   );
+  const makeTenStats = useQuery(
+    api.games.myGameStats,
+    isAuthenticated ? { gameId: "make-ten" } : "skip",
+  );
   const recordAttempt = useMutation(api.curriculum.recordActivityAttempt);
   const primaryEmail =
     user?.primaryEmailAddress?.emailAddress ?? "your account";
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(
     null,
   );
+  const [selectedGame, setSelectedGame] = useState<GameScreen | null>(null);
   const [selectedAnswers, setSelectedAnswers] = useState<
     Record<string, string>
   >({});
@@ -129,6 +135,7 @@ export function SignedInHome() {
 
   const showTopics = () => {
     setSelectedMode("topics");
+    setSelectedGame(null);
     setSelectedGradeLevel((currentGradeLevel) => {
       if (currentGradeLevel !== null) {
         return currentGradeLevel;
@@ -143,6 +150,7 @@ export function SignedInHome() {
 
   const showGrades = () => {
     setSelectedMode("grades");
+    setSelectedGame(null);
     setSelectedSectionId(null);
     setSelectedAnswers({});
     setLessonError(null);
@@ -150,6 +158,7 @@ export function SignedInHome() {
 
   const chooseGrade = (gradeLevel: number) => {
     setSelectedMode("topics");
+    setSelectedGame(null);
     setSelectedGradeLevel(gradeLevel);
     setSelectedSectionId(null);
     setSelectedAnswers({});
@@ -172,6 +181,10 @@ export function SignedInHome() {
         <Text style={styles.body}>We are connecting your account.</Text>
       </View>
     );
+  }
+
+  if (selectedGame === "make-ten") {
+    return <MakeTenGame onExit={() => setSelectedGame(null)} />;
   }
 
   return (
@@ -240,7 +253,26 @@ export function SignedInHome() {
           </View>
         </View>
 
-        {selectedMode === "games" ? <MakeTenGame /> : null}
+        {selectedMode === "games" ? (
+          <View style={styles.gameList}>
+            <Pressable
+              style={styles.gameCard}
+              onPress={() => setSelectedGame("make-ten")}
+            >
+              <View style={styles.gameCardBadge}>
+                <Text style={styles.gameCardBadgeText}>10</Text>
+              </View>
+              <View style={styles.gameCardCopy}>
+                <Text style={styles.gameCardTitle}>Making Tens</Text>
+                <Text style={styles.gameCardText}>
+                  Race the clock and solve as many missing-number facts as you
+                  can in 2 minutes.
+                </Text>
+              </View>
+              <Text style={styles.gameCardAction}>Play</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {selectedMode === "profile" ? (
           <View style={styles.profilePanel}>
@@ -267,6 +299,42 @@ export function SignedInHome() {
               <View style={styles.profileStat}>
                 <Text style={styles.profileStatValue}>{totalLessons}</Text>
                 <Text style={styles.profileStatLabel}>Topics</Text>
+              </View>
+            </View>
+            <View style={styles.gameStatsPanel}>
+              <Text style={styles.sectionTitle}>Game Stats</Text>
+              <View style={styles.profileStatRow}>
+                <View style={styles.profileStat}>
+                  <Text style={styles.profileStatValue}>
+                    {makeTenStats?.highScore ?? 0}
+                  </Text>
+                  <Text style={styles.profileStatLabel}>Make 10 Best</Text>
+                </View>
+                <View style={styles.profileStat}>
+                  <Text style={styles.profileStatValue}>
+                    {makeTenStats?.recentRuns.length ?? 0}
+                  </Text>
+                  <Text style={styles.profileStatLabel}>Recent Runs</Text>
+                </View>
+              </View>
+              <View style={styles.recentRunList}>
+                {makeTenStats?.recentRuns.length ? (
+                  makeTenStats.recentRuns.map((run, index) => (
+                    <View key={run.id} style={styles.recentRunRow}>
+                      <Text style={styles.recentRunRank}>#{index + 1}</Text>
+                      <Text style={styles.recentRunScore}>
+                        {run.score} correct
+                      </Text>
+                      <Text style={styles.recentRunDate}>
+                        {new Date(run.completedAt).toLocaleDateString()}
+                      </Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.gameCardText}>
+                    Play Making Tens to start tracking your scores.
+                  </Text>
+                )}
               </View>
             </View>
           </View>
@@ -479,13 +547,19 @@ export function SignedInHome() {
           active={selectedMode === "games"}
           icon="□"
           label="Games"
-          onPress={() => setSelectedMode("games")}
+          onPress={() => {
+            setSelectedMode("games");
+            setSelectedGame(null);
+          }}
         />
         <NavTab
           active={selectedMode === "profile"}
           icon="◔"
           label="Profile"
-          onPress={() => setSelectedMode("profile")}
+          onPress={() => {
+            setSelectedMode("profile");
+            setSelectedGame(null);
+          }}
         />
       </View>
     </View>

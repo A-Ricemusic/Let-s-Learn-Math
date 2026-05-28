@@ -51,4 +51,21 @@ export default defineSchema({
       "tokenIdentifier",
       "createdAt",
     ]),
+  gameRuns: defineTable({
+    tokenIdentifier: v.string(),
+    gameId: v.string(),
+    score: v.number(),
+    durationSeconds: v.number(),
+    completedAt: v.number(),
+  })
+    .index("by_tokenIdentifier_and_gameId_and_completedAt", [
+      "tokenIdentifier",
+      "gameId",
+      "completedAt",
+    ])
+    .index("by_tokenIdentifier_and_gameId_and_score", [
+      "tokenIdentifier",
+      "gameId",
+      "score",
+    ]),
 });

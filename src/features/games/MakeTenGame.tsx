@@ -1,167 +1,213 @@
-import { useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useMutation } from "convex/react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Easing, Pressable, Text, View } from "react-native";
+import { api } from "../../../convex/_generated/api";
 import { styles } from "../../styles/styles";
 
-type MakeTenPair = {
-  readonly id: string;
-  readonly left: number;
-  readonly right: number;
+const GAME_ID = "make-ten";
+const ROUND_SECONDS = 120;
+const ANSWER_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+
+type MakeTenGameProps = {
+  readonly onExit: () => void;
 };
 
-const MAKE_TEN_PAIRS: readonly MakeTenPair[] = [
-  { id: "0-10", left: 0, right: 10 },
-  { id: "1-9", left: 1, right: 9 },
-  { id: "2-8", left: 2, right: 8 },
-  { id: "3-7", left: 3, right: 7 },
-  { id: "4-6", left: 4, right: 6 },
-  { id: "5-5", left: 5, right: 5 },
-];
-
-const NUMBER_TILES = [0, 1, 2, 3, 4, 5, 5, 6, 7, 8, 9, 10] as const;
-
-type NumberTile = {
-  readonly id: string;
-  readonly value: number;
-};
-
-function buildTiles() {
-  return NUMBER_TILES.map((value, index) => ({
-    id: `${value}-${index}`,
-    value,
-  }));
+function buildQuestion(previousLeft: number | null) {
+  const next = Math.floor(Math.random() * 11);
+  if (previousLeft === null || next !== previousLeft) {
+    return next;
+  }
+  return (next + 1) % 11;
 }
 
-function pairIdForValues(first: number, second: number) {
-  const low = Math.min(first, second);
-  const high = Math.max(first, second);
-
-  return `${low}-${high}`;
+function formatClock(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 }
 
-export function MakeTenGame() {
-  const [selectedTileIds, setSelectedTileIds] = useState<readonly string[]>([]);
-  const [matchedPairIds, setMatchedPairIds] = useState<readonly string[]>([]);
-  const [feedback, setFeedback] = useState("Pick two numbers that make 10.");
-  const tiles = useMemo(buildTiles, []);
-  const matchedPairSet = useMemo(
-    () => new Set(matchedPairIds),
-    [matchedPairIds],
-  );
-  const isRoundComplete = matchedPairIds.length === MAKE_TEN_PAIRS.length;
+export function MakeTenGame({ onExit }: MakeTenGameProps) {
+  const recordGameRun = useMutation(api.games.recordGameRun);
+  const [leftNumber, setLeftNumber] = useState(() => buildQuestion(null));
+  const [score, setScore] = useState(0);
+  const [secondsLeft, setSecondsLeft] = useState(ROUND_SECONDS);
+  const [isFinished, setIsFinished] = useState(false);
+  const [feedback, setFeedback] = useState("Choose the missing number.");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const hasSavedRun = useRef(false);
+  const celebration = useRef(new Animated.Value(0)).current;
+  const correctAnswer = 10 - leftNumber;
+  const options = useMemo(() => ANSWER_OPTIONS, []);
 
-  const chooseTile = (tile: NumberTile) => {
-    if (isRoundComplete || selectedTileIds.includes(tile.id)) {
+  useEffect(() => {
+    if (isFinished) {
       return;
     }
 
-    if (selectedTileIds.length === 0) {
-      setSelectedTileIds([tile.id]);
-      setFeedback(`${tile.value} needs ${10 - tile.value} to make 10.`);
+    const timer = setInterval(() => {
+      setSecondsLeft((current) => {
+        if (current <= 1) {
+          setIsFinished(true);
+          return 0;
+        }
+
+        return current - 1;
+      });
+    }, 1000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [isFinished]);
+
+  useEffect(() => {
+    if (!isFinished || hasSavedRun.current) {
       return;
     }
 
-    const firstTile = tiles.find(
-      (candidate) => candidate.id === selectedTileIds[0],
+    hasSavedRun.current = true;
+    setSaveError(null);
+    void recordGameRun({
+      gameId: GAME_ID,
+      score,
+      durationSeconds: ROUND_SECONDS,
+    }).catch(() => {
+      setSaveError("Score could not be saved. Your run still counts here.");
+    });
+  }, [isFinished, recordGameRun, score]);
+
+  useEffect(() => {
+    if (!isFinished) {
+      celebration.setValue(0);
+      return;
+    }
+
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(celebration, {
+          duration: 650,
+          easing: Easing.out(Easing.quad),
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+        Animated.timing(celebration, {
+          duration: 650,
+          easing: Easing.in(Easing.quad),
+          toValue: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+      { iterations: 4 },
     );
 
-    if (!firstTile) {
-      setSelectedTileIds([]);
-      setFeedback("Pick two numbers that make 10.");
+    animation.start();
+
+    return () => {
+      animation.stop();
+    };
+  }, [celebration, isFinished]);
+
+  const chooseAnswer = (answer: number) => {
+    if (isFinished) {
       return;
     }
 
-    const total = firstTile.value + tile.value;
-    const pairId = pairIdForValues(firstTile.value, tile.value);
-
-    if (total === 10 && !matchedPairSet.has(pairId)) {
-      setMatchedPairIds((current) => [...current, pairId]);
-      setSelectedTileIds([]);
-      setFeedback(`${firstTile.value} + ${tile.value} = 10`);
+    if (answer !== correctAnswer) {
+      setFeedback(`${leftNumber} needs ${correctAnswer}. Try again.`);
       return;
     }
 
-    if (total === 10) {
-      setSelectedTileIds([]);
-      setFeedback("That pair already made 10. Find another one.");
-      return;
-    }
-
-    setSelectedTileIds([]);
-    setFeedback(`${firstTile.value} + ${tile.value} = ${total}. Try again.`);
+    setScore((current) => current + 1);
+    setFeedback(`${leftNumber} + ${answer} = 10`);
+    setLeftNumber((current) => buildQuestion(current));
   };
 
   const resetGame = () => {
-    setSelectedTileIds([]);
-    setMatchedPairIds([]);
-    setFeedback("Pick two numbers that make 10.");
+    hasSavedRun.current = false;
+    setLeftNumber(buildQuestion(null));
+    setScore(0);
+    setSecondsLeft(ROUND_SECONDS);
+    setIsFinished(false);
+    setFeedback("Choose the missing number.");
+    setSaveError(null);
   };
 
   return (
-    <View style={styles.makeTenPanel}>
+    <View style={styles.gameScreen}>
       <View style={styles.makeTenHeader}>
         <View>
           <Text style={styles.lessonTitle}>Make 10</Text>
           <Text style={styles.lessonExplain}>
-            Match every number pair that adds up to 10.
+            Find the number that finishes each ten.
           </Text>
         </View>
-        <View style={styles.makeTenScorePill}>
-          <Text style={styles.makeTenScoreText}>
-            {matchedPairIds.length}/{MAKE_TEN_PAIRS.length}
-          </Text>
+        <Pressable style={styles.backButton} onPress={onExit}>
+          <Text style={styles.backButtonText}>Games</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.gameHud}>
+        <View style={styles.gameHudPill}>
+          <Text style={styles.gameHudLabel}>Time</Text>
+          <Text style={styles.gameHudValue}>{formatClock(secondsLeft)}</Text>
+        </View>
+        <View style={styles.gameHudPill}>
+          <Text style={styles.gameHudLabel}>Score</Text>
+          <Text style={styles.gameHudValue}>{score}</Text>
         </View>
       </View>
 
-      <View style={styles.makeTenTarget}>
-        <Text style={styles.makeTenTargetNumber}>10</Text>
-      </View>
+      {isFinished ? (
+        <View style={styles.gameCompletePanel}>
+          <Animated.Text
+            style={[
+              styles.celebrationText,
+              {
+                transform: [
+                  {
+                    scale: celebration.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1, 1.12],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            Great run!
+          </Animated.Text>
+          <Text style={styles.gameCompleteScore}>You've done {score}</Text>
+          <Text style={styles.gameCompleteCopy}>
+            That score was saved for your Game Stats.
+          </Text>
+          {saveError ? <Text style={styles.error}>{saveError}</Text> : null}
+          <Pressable style={styles.primaryButton} onPress={resetGame}>
+            <Text style={styles.primaryButtonText}>Play again</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <>
+          <View style={styles.makeTenEquation}>
+            <Text style={styles.makeTenEquationText}>
+              {leftNumber} + __ = 10
+            </Text>
+          </View>
 
-      <Text style={styles.makeTenFeedback}>
-        {isRoundComplete ? "You found every way to make 10." : feedback}
-      </Text>
+          <Text style={styles.makeTenFeedback}>{feedback}</Text>
 
-      <View style={styles.makeTenTileGrid}>
-        {tiles.map((tile) => {
-          const isSelected = selectedTileIds.includes(tile.id);
-
-          return (
-            <Pressable
-              key={tile.id}
-              style={[
-                styles.makeTenTile,
-                isSelected ? styles.makeTenTileSelected : null,
-              ]}
-              onPress={() => chooseTile(tile)}
-            >
-              <Text style={styles.makeTenTileText}>{tile.value}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <View style={styles.makeTenPairGrid}>
-        {MAKE_TEN_PAIRS.map((pair) => {
-          const isMatched = matchedPairSet.has(pair.id);
-
-          return (
-            <View
-              key={pair.id}
-              style={[
-                styles.makeTenPairCard,
-                isMatched ? styles.makeTenPairCardMatched : null,
-              ]}
-            >
-              <Text style={styles.makeTenPairText}>
-                {isMatched ? `${pair.left} + ${pair.right}` : "? + ?"}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
-
-      <Pressable style={styles.primaryButton} onPress={resetGame}>
-        <Text style={styles.primaryButtonText}>New round</Text>
-      </Pressable>
+          <View style={styles.makeTenTileGrid}>
+            {options.map((answer) => (
+              <Pressable
+                key={answer}
+                style={styles.makeTenTile}
+                onPress={() => chooseAnswer(answer)}
+              >
+                <Text style={styles.makeTenTileText}>{answer}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      )}
     </View>
   );
 }
