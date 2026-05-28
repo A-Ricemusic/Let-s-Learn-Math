@@ -45,6 +45,45 @@ const tokenCache = {
 type AuthStep = "intro" | "email" | "code";
 type PendingFlow = "signIn" | "signUp";
 type AuthMode = "signIn" | "signUp";
+type SectionQuestion = {
+  id: string;
+  prompt: string;
+  choices: string[];
+  correctAnswer: string;
+  visualModel: string;
+  visualNumbers: number[];
+};
+type SectionExample = {
+  id: string;
+  explanation: string;
+  visualModel: string;
+  visualNumbers: number[];
+};
+type SectionLesson = {
+  id: string;
+  title: string;
+  prompt: string;
+  choices: string[];
+  correctAnswer: string;
+  visualModel: string;
+  visualNumbers: number[];
+  examples: Array<{
+    id: string;
+    explanation: string;
+    visualNumbers: number[];
+  }>;
+};
+type CurriculumSection = {
+  id: string;
+  title: string;
+  goal: string;
+  lessons: SectionLesson[];
+};
+type SectionPlan = {
+  examples: SectionExample[];
+  practice: SectionQuestion[];
+  quiz: SectionQuestion[];
+};
 
 export default function App() {
   if (!publishableKey || convex === null) {
@@ -376,42 +415,52 @@ function SignedInHome() {
   const recordAttempt = useMutation(api.curriculum.recordActivityAttempt);
   const primaryEmail =
     user?.primaryEmailAddress?.emailAddress ?? "your account";
-  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(
+    null,
+  );
+  const [selectedAnswers, setSelectedAnswers] = useState<
+    Record<string, string>
+  >({});
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
   const [lessonError, setLessonError] = useState<string | null>(null);
 
-  const lessons = curriculum?.units.flatMap((unit) => unit.lessons) ?? [];
-  const selectedLesson =
-    lessons.find((lesson) => lesson.id === selectedLessonId) ?? lessons[0];
+  const sections = curriculum?.units ?? [];
+  const selectedSection =
+    sections.find((section) => section.id === selectedSectionId) ?? null;
   const selectedProgress = progress?.find(
-    (row) => row.lessonId === selectedLesson?.id,
+    (row) => row.lessonId === selectedSection?.id,
   );
   const masteredLessons =
     progress?.filter((row) => row.status === "mastered").length ?? 0;
-  const totalLessons = lessons.length;
+  const totalLessons = sections.length;
+  const sectionPlan = selectedSection
+    ? buildSectionPlan(selectedSection)
+    : null;
 
-  const handleAnswer = async (answer: string) => {
+  const handleAnswer = async (question: SectionQuestion, answer: string) => {
     if (
       !isAuthenticated ||
-      !selectedLesson ||
+      !selectedSection ||
       selectedGradeLevel === null ||
       isSubmittingAnswer
     ) {
       return;
     }
 
-    setSelectedAnswer(answer);
+    setSelectedAnswers((current) => ({
+      ...current,
+      [question.id]: answer,
+    }));
     setIsSubmittingAnswer(true);
     setLessonError(null);
 
     try {
       await recordAttempt({
         gradeLevel: selectedGradeLevel,
-        unitId: selectedLesson.unitId,
-        lessonId: selectedLesson.id,
-        activityId: `${selectedLesson.id}-check`,
-        isCorrect: answer === selectedLesson.correctAnswer,
+        unitId: selectedSection.id,
+        lessonId: selectedSection.id,
+        activityId: question.id,
+        isCorrect: answer === question.correctAnswer,
       });
     } catch (error) {
       setLessonError(getErrorMessage(error));
@@ -423,23 +472,23 @@ function SignedInHome() {
   const goHome = () => {
     setSelectedMode("home");
     setSelectedGradeLevel(null);
-    setSelectedLessonId(null);
-    setSelectedAnswer(null);
+    setSelectedSectionId(null);
+    setSelectedAnswers({});
     setLessonError(null);
   };
 
   const chooseLessons = () => {
     setSelectedMode("lessons");
     setSelectedGradeLevel(null);
-    setSelectedLessonId(null);
-    setSelectedAnswer(null);
+    setSelectedSectionId(null);
+    setSelectedAnswers({});
     setLessonError(null);
   };
 
   const chooseGrade = (gradeLevel: number) => {
     setSelectedGradeLevel(gradeLevel);
-    setSelectedLessonId(null);
-    setSelectedAnswer(null);
+    setSelectedSectionId(null);
+    setSelectedAnswers({});
     setLessonError(null);
   };
 
@@ -541,15 +590,14 @@ function SignedInHome() {
       {selectedMode === "lessons" &&
       selectedGradeLevel !== null &&
       curriculum !== undefined &&
-      progress !== undefined &&
-      selectedLesson !== undefined ? (
+      progress !== undefined ? (
         <>
           <Pressable
             style={styles.backButton}
             onPress={() => {
               setSelectedGradeLevel(null);
-              setSelectedLessonId(null);
-              setSelectedAnswer(null);
+              setSelectedSectionId(null);
+              setSelectedAnswers({});
               setLessonError(null);
             }}
           >
@@ -578,24 +626,21 @@ function SignedInHome() {
             <View style={styles.unitList}>
               {curriculum.units.map((unit) => (
                 <View key={unit.id} style={styles.unitSection}>
-                  <Text style={styles.unitTitle}>{unit.title}</Text>
-                  <Text style={styles.unitGoal}>{unit.goal}</Text>
-                  {unit.lessons.map((lesson) => {
-                    const lessonProgress = progress.find(
-                      (row) => row.lessonId === lesson.id,
+                  {(() => {
+                    const unitProgress = progress.find(
+                      (row) => row.lessonId === unit.id,
                     );
-                    const isSelected = lesson.id === selectedLesson.id;
+                    const isSelected = unit.id === selectedSection?.id;
 
                     return (
                       <Pressable
-                        key={lesson.id}
                         style={[
                           styles.lessonButton,
                           isSelected && styles.lessonButtonSelected,
                         ]}
                         onPress={() => {
-                          setSelectedLessonId(lesson.id);
-                          setSelectedAnswer(null);
+                          setSelectedSectionId(unit.id);
+                          setSelectedAnswers({});
                           setLessonError(null);
                         }}
                       >
@@ -605,7 +650,15 @@ function SignedInHome() {
                             isSelected && styles.lessonButtonTitleSelected,
                           ]}
                         >
-                          {lesson.title}
+                          {unit.title}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.lessonButtonGoal,
+                            isSelected && styles.lessonButtonMetaSelected,
+                          ]}
+                        >
+                          {unit.goal}
                         </Text>
                         <Text
                           style={[
@@ -613,82 +666,88 @@ function SignedInHome() {
                             isSelected && styles.lessonButtonMetaSelected,
                           ]}
                         >
-                          {lessonProgress?.status.replace("_", " ") ??
+                          {unitProgress?.status.replace("_", " ") ??
                             "not started"}
                         </Text>
                       </Pressable>
                     );
-                  })}
+                  })()}
                 </View>
               ))}
             </View>
 
-            <View style={styles.lessonPanel}>
-              <Text style={styles.lessonConcept}>{selectedLesson.concept}</Text>
-              <Text style={styles.lessonTitle}>{selectedLesson.title}</Text>
-              <Text style={styles.lessonExplain}>
-                {selectedLesson.explanation}
-              </Text>
+            {selectedSection === null || sectionPlan === null ? (
+              <View style={styles.lessonPanel}>
+                <Text style={styles.lessonTitle}>Choose a section</Text>
+                <Text style={styles.lessonExplain}>
+                  Tap Making Ten or another section to open its lesson page.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.lessonPanel}>
+                <Text style={styles.lessonConcept}>
+                  {selectedSection.title}
+                </Text>
+                <Text style={styles.lessonTitle}>{selectedSection.title}</Text>
+                <Text style={styles.lessonExplain}>{selectedSection.goal}</Text>
 
-              <View style={styles.examplesStack}>
-                {selectedLesson.examples.map((example, index) => (
-                  <View key={example.id} style={styles.exampleBlock}>
-                    <Text style={styles.exampleLabel}>Example {index + 1}</Text>
-                    <Text style={styles.exampleText}>
-                      {example.explanation}
-                    </Text>
-                    <LessonVisual
-                      model={selectedLesson.visualModel}
-                      numbers={example.visualNumbers}
-                    />
-                  </View>
+                <View style={styles.examplesStack}>
+                  {sectionPlan.examples.map((example, index) => (
+                    <View key={example.id} style={styles.exampleBlock}>
+                      <Text style={styles.exampleLabel}>
+                        Example {index + 1}
+                      </Text>
+                      <Text style={styles.exampleText}>
+                        {example.explanation}
+                      </Text>
+                      <LessonVisual
+                        model={example.visualModel}
+                        numbers={example.visualNumbers}
+                      />
+                    </View>
+                  ))}
+                </View>
+
+                <Text style={styles.sectionTitle}>Practice</Text>
+                {sectionPlan.practice.map((question, index) => (
+                  <QuestionBlock
+                    key={question.id}
+                    disabled={isSubmittingAnswer}
+                    index={index}
+                    label="Practice"
+                    onAnswer={handleAnswer}
+                    question={question}
+                    selectedAnswer={selectedAnswers[question.id]}
+                  />
                 ))}
+
+                <Text style={styles.sectionTitle}>Quiz</Text>
+                {sectionPlan.quiz.map((question, index) => (
+                  <QuestionBlock
+                    key={question.id}
+                    disabled={isSubmittingAnswer}
+                    index={index}
+                    label="Question"
+                    onAnswer={handleAnswer}
+                    question={question}
+                    selectedAnswer={selectedAnswers[question.id]}
+                  />
+                ))}
+
+                {lessonError ? (
+                  <Text style={styles.error}>{lessonError}</Text>
+                ) : null}
+
+                <View style={styles.masteryBox}>
+                  <Text style={styles.masteryLabel}>Mastery</Text>
+                  <Text style={styles.masteryValue}>
+                    {selectedProgress
+                      ? `${selectedProgress.masteryScore}% after ${selectedProgress.attemptCount} tries`
+                      : "Practice to start"}
+                  </Text>
+                </View>
               </View>
-
-              <Text style={styles.practicePrompt}>{selectedLesson.prompt}</Text>
-              <View style={styles.choiceRow}>
-                {selectedLesson.choices.map((choice) => {
-                  const isChosen = selectedAnswer === choice;
-                  const isCorrect = choice === selectedLesson.correctAnswer;
-
-                  return (
-                    <Pressable
-                      key={choice}
-                      disabled={isSubmittingAnswer}
-                      style={[
-                        styles.choiceButton,
-                        isChosen && isCorrect && styles.choiceCorrect,
-                        isChosen && !isCorrect && styles.choiceIncorrect,
-                        isSubmittingAnswer && styles.disabledButton,
-                      ]}
-                      onPress={() => handleAnswer(choice)}
-                    >
-                      <Text style={styles.choiceButtonText}>{choice}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {selectedAnswer ? (
-                <Text style={styles.feedbackText}>
-                  {selectedAnswer === selectedLesson.correctAnswer
-                    ? "Yes. That is right."
-                    : "Try again. Look at the picture."}
-                </Text>
-              ) : null}
-              {lessonError ? (
-                <Text style={styles.error}>{lessonError}</Text>
-              ) : null}
-
-              <View style={styles.masteryBox}>
-                <Text style={styles.masteryLabel}>Mastery</Text>
-                <Text style={styles.masteryValue}>
-                  {selectedProgress
-                    ? `${selectedProgress.masteryScore}% after ${selectedProgress.attemptCount} tries`
-                    : "Practice to start"}
-                </Text>
-              </View>
-            </View>
+            )}
           </View>
         </>
       ) : null}
@@ -822,6 +881,132 @@ function LessonVisual({
       <View style={styles.circleShape} />
     </View>
   );
+}
+
+function QuestionBlock({
+  disabled,
+  index,
+  label,
+  onAnswer,
+  question,
+  selectedAnswer,
+}: {
+  disabled: boolean;
+  index: number;
+  label: string;
+  onAnswer: (question: SectionQuestion, answer: string) => void;
+  question: SectionQuestion;
+  selectedAnswer?: string;
+}) {
+  return (
+    <View style={styles.questionBlock}>
+      <Text style={styles.exampleLabel}>
+        {label} {index + 1}
+      </Text>
+      <LessonVisual
+        model={question.visualModel}
+        numbers={question.visualNumbers}
+      />
+      <Text style={styles.practicePrompt}>{question.prompt}</Text>
+      <View style={styles.choiceRow}>
+        {question.choices.map((choice) => {
+          const isChosen = selectedAnswer === choice;
+          const isCorrect = choice === question.correctAnswer;
+
+          return (
+            <Pressable
+              key={choice}
+              disabled={disabled}
+              style={[
+                styles.choiceButton,
+                isChosen && isCorrect && styles.choiceCorrect,
+                isChosen && !isCorrect && styles.choiceIncorrect,
+                disabled && styles.disabledButton,
+              ]}
+              onPress={() => onAnswer(question, choice)}
+            >
+              <Text style={styles.choiceButtonText}>{choice}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {selectedAnswer ? (
+        <Text style={styles.feedbackText}>
+          {selectedAnswer === question.correctAnswer
+            ? "Yes. That is right."
+            : "Try again. Look at the picture."}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function buildSectionPlan(section: CurriculumSection): SectionPlan {
+  const examples = section.lessons
+    .flatMap((lesson) =>
+      lesson.examples.map((example) => ({
+        id: example.id,
+        explanation: example.explanation,
+        visualModel: lesson.visualModel,
+        visualNumbers: example.visualNumbers,
+      })),
+    )
+    .slice(0, 3);
+
+  return {
+    examples: fillExamples(section, examples),
+    practice: buildQuestions(section, "practice", 3),
+    quiz: buildQuestions(section, "quiz", 5),
+  };
+}
+
+function fillExamples(
+  section: CurriculumSection,
+  examples: SectionExample[],
+): SectionExample[] {
+  if (examples.length >= 3) {
+    return examples;
+  }
+
+  const firstLesson = section.lessons[0];
+  if (firstLesson === undefined) {
+    return examples;
+  }
+
+  const filled = [...examples];
+  while (filled.length < 3) {
+    filled.push({
+      id: `${section.id}-extra-example-${filled.length + 1}`,
+      explanation: firstLesson.title,
+      visualModel: firstLesson.visualModel,
+      visualNumbers: firstLesson.visualNumbers,
+    });
+  }
+
+  return filled;
+}
+
+function buildQuestions(
+  section: CurriculumSection,
+  kind: "practice" | "quiz",
+  count: number,
+): SectionQuestion[] {
+  if (section.lessons.length === 0) {
+    return [];
+  }
+
+  return Array.from({ length: count }, (_, index) => {
+    const lesson = section.lessons[index % section.lessons.length];
+
+    return {
+      id: `${section.id}-${kind}-${index + 1}`,
+      prompt: lesson.prompt,
+      choices: lesson.choices,
+      correctAnswer: lesson.correctAnswer,
+      visualModel: lesson.visualModel,
+      visualNumbers: lesson.visualNumbers,
+    };
+  });
 }
 
 function DotGroup({ count }: { count: number }) {
@@ -1145,6 +1330,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textTransform: "capitalize",
   },
+  lessonButtonGoal: {
+    color: "#475569",
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 5,
+  },
   lessonButtonMetaSelected: {
     color: "#cbd5e1",
   },
@@ -1183,6 +1374,14 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
     borderRadius: 8,
     borderWidth: 1,
+    padding: 12,
+  },
+  questionBlock: {
+    backgroundColor: "#ffffff",
+    borderColor: "#e2e8f0",
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 12,
     padding: 12,
   },
   exampleLabel: {
