@@ -5,6 +5,8 @@ import type {
   SectionQuestion,
 } from "./types";
 
+const EXAMPLE_SLIDE_COUNT = 9;
+
 export function buildSectionPlan(section: CurriculumSection): SectionPlan {
   const examples = section.lessons
     .flatMap((lesson) =>
@@ -15,7 +17,7 @@ export function buildSectionPlan(section: CurriculumSection): SectionPlan {
         visualNumbers: example.visualNumbers,
       })),
     )
-    .slice(0, section.id === "making-ten" ? 6 : 3);
+    .slice(0, EXAMPLE_SLIDE_COUNT);
   const filledExamples = fillExamples(section, examples);
 
   return {
@@ -42,9 +44,7 @@ function fillExamples(
   section: CurriculumSection,
   examples: SectionExample[],
 ): SectionExample[] {
-  const targetCount = section.id === "making-ten" ? 6 : 3;
-
-  if (examples.length >= targetCount) {
+  if (examples.length >= EXAMPLE_SLIDE_COUNT) {
     return examples;
   }
 
@@ -54,7 +54,7 @@ function fillExamples(
   }
 
   const filled = [...examples];
-  while (filled.length < targetCount) {
+  while (filled.length < EXAMPLE_SLIDE_COUNT) {
     filled.push({
       id: `${section.id}-extra-example-${filled.length + 1}`,
       explanation: firstLesson.title,
