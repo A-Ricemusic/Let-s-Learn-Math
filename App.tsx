@@ -94,31 +94,45 @@ function logJwtClaims(token: string | null) {
     return;
   }
 
-  const [, payload] = token.split(".");
+  const [header, payload] = token.split(".");
 
-  if (!payload) {
+  if (!header || !payload) {
     console.log("Convex Clerk token: missing JWT payload");
     return;
   }
 
   try {
-    const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const paddedPayload = normalizedPayload.padEnd(
-      Math.ceil(normalizedPayload.length / 4) * 4,
-      "=",
-    );
-    const claims = JSON.parse(atob(paddedPayload)) as unknown;
+    const claims = JSON.parse(decodeBase64Url(payload)) as unknown;
+    const jwtHeader = JSON.parse(decodeBase64Url(header)) as unknown;
 
-    if (isJwtClaims(claims)) {
+    if (isJwtClaims(claims) && isJwtHeader(jwtHeader)) {
       console.log("Convex Clerk token claims", {
+        alg: jwtHeader.alg,
         aud: claims.aud,
         exp: claims.exp,
         iss: claims.iss,
+        kid: jwtHeader.kid,
       });
     }
   } catch {
     console.log("Convex Clerk token: failed to decode JWT payload");
   }
+}
+
+function decodeBase64Url(value: string) {
+  const normalizedValue = value.replace(/-/g, "+").replace(/_/g, "/");
+  const paddedValue = normalizedValue.padEnd(
+    Math.ceil(normalizedValue.length / 4) * 4,
+    "=",
+  );
+
+  return atob(paddedValue);
+}
+
+function isJwtHeader(
+  value: unknown,
+): value is { alg?: unknown; kid?: unknown } {
+  return typeof value === "object" && value !== null;
 }
 
 function isJwtClaims(
