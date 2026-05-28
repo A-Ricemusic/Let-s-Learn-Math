@@ -7,7 +7,24 @@ export type VisualModel =
   | "skip_count"
   | "measurement_units"
   | "clock"
-  | "shape_sort";
+  | "shape_sort"
+  | "place_value_chart"
+  | "area_model"
+  | "division_model"
+  | "fraction_bar"
+  | "decimal_grid"
+  | "volume_model"
+  | "coordinate_plane"
+  | "expression_cards"
+  | "measurement_conversion"
+  | "angle_model"
+  | "line_geometry"
+  | "ratio_table"
+  | "percent_bar"
+  | "equation_balance"
+  | "circle_measure"
+  | "probability_model"
+  | "data_distribution";
 
 export type SectionQuestion = {
   id: string;

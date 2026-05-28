@@ -4,13 +4,13 @@ import { calculateLessonMastery } from "../src/features/lessons/mastery";
 import { ensureLearnerProfile, getAuthenticatedIdentity } from "./lib/auth";
 import {
   findCurriculumQuestion,
+  getGradeOption,
   getGradeUnits,
+  getGradeTeachingNote,
   gradeOptions,
 } from "../src/server/curriculum";
 import type { Doc } from "./_generated/dataModel";
 
-const MIN_GRADE_LEVEL = 1;
-const MAX_GRADE_LEVEL = 12;
 const MAX_PROGRESS_ROWS = 100;
 
 function toProgressSummary(row: Doc<"lessonProgress">) {
@@ -28,10 +28,9 @@ function toProgressSummary(row: Doc<"lessonProgress">) {
 function assertGradeLevel(gradeLevel: number) {
   if (
     !Number.isInteger(gradeLevel) ||
-    gradeLevel < MIN_GRADE_LEVEL ||
-    gradeLevel > MAX_GRADE_LEVEL
+    getGradeOption(gradeLevel) === undefined
   ) {
-    throw new Error("Grade not found");
+    throw new Error("Curriculum path not found");
   }
 }
 
@@ -41,8 +40,7 @@ export const firstGrade = query({
     return {
       gradeLevel: 1,
       title: "First Grade Math",
-      teachingNote:
-        "Use simple words, short practice, and clear visuals for every idea.",
+      teachingNote: getGradeTeachingNote(1),
       units: getGradeUnits(1),
     };
   },
@@ -61,21 +59,16 @@ export const byGrade = query({
   },
   handler: async (_ctx, args) => {
     assertGradeLevel(args.gradeLevel);
-    const grade = gradeOptions.find(
-      (option) => option.gradeLevel === args.gradeLevel,
-    );
+    const grade = getGradeOption(args.gradeLevel);
 
     if (grade === undefined) {
-      throw new Error("Grade not found");
+      throw new Error("Curriculum path not found");
     }
 
     return {
       gradeLevel: grade.gradeLevel,
-      title: `${grade.title} Math`,
-      teachingNote:
-        args.gradeLevel === 1
-          ? "Use simple words, short practice, and clear visuals for every idea."
-          : "This grade is selectable now. More complete lessons can be added to this path.",
+      title: grade.curriculumTitle,
+      teachingNote: getGradeTeachingNote(args.gradeLevel),
       units: getGradeUnits(args.gradeLevel),
     };
   },

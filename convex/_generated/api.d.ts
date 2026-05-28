@@ -8,11 +8,17 @@
  * @module
  */
 
+import type * as algebraOneCurriculum from "../algebraOneCurriculum.js";
 import type * as curriculum from "../curriculum.js";
+import type * as eighthGradeCurriculum from "../eighthGradeCurriculum.js";
+import type * as fifthGradeCurriculum from "../fifthGradeCurriculum.js";
 import type * as firstGradeCurriculum from "../firstGradeCurriculum.js";
+import type * as fourthGradeCurriculum from "../fourthGradeCurriculum.js";
 import type * as games from "../games.js";
 import type * as hello from "../hello.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as seventhGradeCurriculum from "../seventhGradeCurriculum.js";
+import type * as sixthGradeCurriculum from "../sixthGradeCurriculum.js";
 import type * as sync from "../sync.js";
 
 import type {
@@ -22,11 +28,17 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  algebraOneCurriculum: typeof algebraOneCurriculum;
   curriculum: typeof curriculum;
+  eighthGradeCurriculum: typeof eighthGradeCurriculum;
+  fifthGradeCurriculum: typeof fifthGradeCurriculum;
   firstGradeCurriculum: typeof firstGradeCurriculum;
+  fourthGradeCurriculum: typeof fourthGradeCurriculum;
   games: typeof games;
   hello: typeof hello;
   "lib/auth": typeof lib_auth;
+  seventhGradeCurriculum: typeof seventhGradeCurriculum;
+  sixthGradeCurriculum: typeof sixthGradeCurriculum;
   sync: typeof sync;
 }>;
 

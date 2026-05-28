@@ -102,6 +102,10 @@ export function SignedInHome() {
   }, [floatAnimation]);
 
   const sections = curriculum?.units ?? [];
+  const activePathTitle =
+    grades?.find((grade) => grade.gradeLevel === activeGradeLevel)?.title ??
+    curriculum?.title ??
+    "-";
   const selectedSection =
     sections.find((section) => section.id === selectedSectionId) ?? null;
   const selectedProgress = progress?.find(
@@ -318,7 +322,7 @@ export function SignedInHome() {
                 {selectedMode === "topics"
                   ? "Choose a topic and build number power one step at a time."
                   : selectedMode === "grades"
-                    ? "Pick the grade level you want to practice."
+                    ? "Pick the math path you want to practice."
                     : selectedMode === "games"
                       ? "Warm up with fast math challenges."
                       : "Manage your learning profile."}
@@ -369,10 +373,12 @@ export function SignedInHome() {
 
             <View style={styles.profileStatRow}>
               <View style={styles.profileStat}>
-                <Text style={styles.profileStatValue}>
-                  {activeGradeLevel ?? "-"}
+                <Text
+                  style={[styles.profileStatValue, styles.profilePathValue]}
+                >
+                  {activePathTitle}
                 </Text>
-                <Text style={styles.profileStatLabel}>Grade</Text>
+                <Text style={styles.profileStatLabel}>Path</Text>
               </View>
               <View style={styles.profileStat}>
                 <Text style={styles.profileStatValue}>{masteredLessons}</Text>
@@ -402,7 +408,7 @@ export function SignedInHome() {
                 style={styles.profileActionButton}
                 onPress={showGrades}
               >
-                <Text style={styles.profileActionTitle}>Change Grade</Text>
+                <Text style={styles.profileActionTitle}>Change Path</Text>
                 <Text style={styles.profileActionText}>
                   Pick a different lesson path
                 </Text>
@@ -421,7 +427,7 @@ export function SignedInHome() {
                 ))
               ) : (
                 <Text style={styles.profileEmptyText}>
-                  No lessons completed yet in this grade.
+                  No lessons completed yet in this path.
                 </Text>
               )}
             </View>
@@ -444,7 +450,7 @@ export function SignedInHome() {
                 })
               ) : (
                 <Text style={styles.profileEmptyText}>
-                  Every lesson in this grade is complete.
+                  Every lesson in this path is complete.
                 </Text>
               )}
             </View>
@@ -463,7 +469,7 @@ export function SignedInHome() {
             <Text style={styles.reportTitle}>Parent Progress Report</Text>
             <Text style={styles.reportSubtitle}>
               {user?.fullName ?? user?.firstName ?? "Math learner"} is working
-              through grade {activeGradeLevel ?? "-"} math.
+              through {activePathTitle}.
             </Text>
 
             <View style={styles.reportSection}>
@@ -548,7 +554,7 @@ export function SignedInHome() {
 
         {selectedMode === "grades" ? (
           <View>
-            <Text style={styles.sectionTitle}>Choose A Grade</Text>
+            <Text style={styles.sectionTitle}>Choose A Math Path</Text>
             <View style={styles.gradeGrid}>
               {grades.map((grade) => (
                 <Pressable
@@ -568,12 +574,12 @@ export function SignedInHome() {
 
         {selectedMode === "topics" && selectedGradeLevel === null ? (
           <View style={styles.emptyPanel}>
-            <Text style={styles.sectionTitle}>Choose A Grade</Text>
+            <Text style={styles.sectionTitle}>Choose A Math Path</Text>
             <Text style={styles.gradeButtonText}>
-              Pick a grade first, then the Topics tab will return to that grade.
+              Pick a path first, then the Topics tab will return to that path.
             </Text>
             <Pressable style={styles.primaryNavAction} onPress={showGrades}>
-              <Text style={styles.primaryNavActionText}>Choose grade</Text>
+              <Text style={styles.primaryNavActionText}>Choose path</Text>
             </Pressable>
           </View>
         ) : null}
@@ -583,9 +589,7 @@ export function SignedInHome() {
         (curriculum === undefined || progress === undefined) ? (
           <View style={styles.container}>
             <ActivityIndicator />
-            <Text style={styles.body}>
-              Loading grade {selectedGradeLevel}...
-            </Text>
+            <Text style={styles.body}>Loading {activePathTitle}...</Text>
           </View>
         ) : null}
 
@@ -813,7 +817,7 @@ function BottomNav({
       <NavTab
         active={selectedMode === "grades"}
         icon="△"
-        label="Grades"
+        label="Paths"
         onPress={showGrades}
       />
       <NavTab
