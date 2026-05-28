@@ -1,0 +1,13 @@
+node_modules
+.expo
+.git
+.agents
+AGENTS.md
+CLAUDE.md
+docs
+src
+scripts
+index.ts
+README.md
+skills-lock.json
+convex/_generated/ai

@@ -7,9 +7,16 @@ import {
   useSignUp,
   useUser,
 } from "@clerk/clerk-expo";
+import {
+  ConvexProviderWithAuth,
+  ConvexReactClient,
+  useConvexAuth,
+  useMutation,
+  useQuery,
+} from "convex/react";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -19,8 +26,11 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { api } from "./convex/_generated/api";
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
+const convex = convexUrl ? new ConvexReactClient(convexUrl) : null;
 
 const tokenCache = {
   async getToken(key: string) {
@@ -36,15 +46,85 @@ type PendingFlow = "signIn" | "signUp";
 type AuthMode = "signIn" | "signUp";
 
 export default function App() {
-  if (!publishableKey) {
+  if (!publishableKey || convex === null) {
     return <SetupScreen />;
   }
 
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <AppContent />
+      <ConvexProviderWithAuth client={convex} useAuth={useConvexClerkAuth}>
+        <AppContent />
+      </ConvexProviderWithAuth>
     </ClerkProvider>
   );
+}
+
+function useConvexClerkAuth() {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const fetchAccessToken = useCallback(
+    async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
+      try {
+        const token = await getToken({
+          template: "convex",
+          skipCache: forceRefreshToken,
+        });
+
+        logJwtClaims(token);
+
+        return token;
+      } catch {
+        return null;
+      }
+    },
+    [getToken],
+  );
+
+  return useMemo(
+    () => ({
+      isLoading: !isLoaded,
+      isAuthenticated: isSignedIn ?? false,
+      fetchAccessToken,
+    }),
+    [fetchAccessToken, isLoaded, isSignedIn],
+  );
+}
+
+function logJwtClaims(token: string | null) {
+  if (!__DEV__ || token === null) {
+    return;
+  }
+
+  const [, payload] = token.split(".");
+
+  if (!payload) {
+    console.log("Convex Clerk token: missing JWT payload");
+    return;
+  }
+
+  try {
+    const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const paddedPayload = normalizedPayload.padEnd(
+      Math.ceil(normalizedPayload.length / 4) * 4,
+      "=",
+    );
+    const claims = JSON.parse(atob(paddedPayload)) as unknown;
+
+    if (isJwtClaims(claims)) {
+      console.log("Convex Clerk token claims", {
+        aud: claims.aud,
+        exp: claims.exp,
+        iss: claims.iss,
+      });
+    }
+  } catch {
+    console.log("Convex Clerk token: failed to decode JWT payload");
+  }
+}
+
+function isJwtClaims(
+  value: unknown,
+): value is { aud?: unknown; exp?: unknown; iss?: unknown } {
+  return typeof value === "object" && value !== null;
 }
 
 function AppContent() {
@@ -68,7 +148,8 @@ function SetupScreen() {
       <View style={styles.container}>
         <Text style={styles.title}>Clerk setup needed</Text>
         <Text style={styles.body}>
-          Add EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY to your .env file, then restart Expo.
+          Add EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and EXPO_PUBLIC_CONVEX_URL to
+          your .env file, then restart Expo.
         </Text>
       </View>
     </SafeAreaView>
@@ -175,7 +256,9 @@ function EmailCodeAuth() {
         }
       }
 
-      setErrorMessage("Additional verification is required. We will support that flow later.");
+      setErrorMessage(
+        "Additional verification is required. We will support that flow later.",
+      );
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     } finally {
@@ -211,11 +294,19 @@ function EmailCodeAuth() {
     return (
       <View style={styles.container}>
         <Text style={styles.title}>Let's Learn Math</Text>
-        <Text style={styles.body}>Use your email to continue without a password.</Text>
-        <Pressable style={styles.primaryButton} onPress={() => startAuthFlow("signIn")}>
+        <Text style={styles.body}>
+          Use your email to continue without a password.
+        </Text>
+        <Pressable
+          style={styles.primaryButton}
+          onPress={() => startAuthFlow("signIn")}
+        >
           <Text style={styles.primaryButtonText}>Sign in</Text>
         </Pressable>
-        <Pressable style={styles.secondaryButton} onPress={() => startAuthFlow("signUp")}>
+        <Pressable
+          style={styles.secondaryButton}
+          onPress={() => startAuthFlow("signUp")}
+        >
           <Text style={styles.secondaryButtonText}>Sign up</Text>
         </Pressable>
       </View>
@@ -269,17 +360,27 @@ function EmailCodeAuth() {
         style={[styles.primaryButton, isSubmitting && styles.disabledButton]}
         onPress={step === "email" ? handleEmailSubmit : handleCodeSubmit}
       >
-        <Text style={styles.primaryButtonText}>{isSubmitting ? "Please wait..." : "Continue"}</Text>
+        <Text style={styles.primaryButtonText}>
+          {isSubmitting ? "Please wait..." : "Continue"}
+        </Text>
       </Pressable>
 
       {step === "email" ? (
-        <Pressable disabled={isSubmitting} style={styles.textButton} onPress={() => setStep("intro")}>
+        <Pressable
+          disabled={isSubmitting}
+          style={styles.textButton}
+          onPress={() => setStep("intro")}
+        >
           <Text style={styles.textButtonText}>Back</Text>
         </Pressable>
       ) : null}
 
       {step === "code" ? (
-        <Pressable disabled={isSubmitting} style={styles.textButton} onPress={goBackToEmail}>
+        <Pressable
+          disabled={isSubmitting}
+          style={styles.textButton}
+          onPress={goBackToEmail}
+        >
           <Text style={styles.textButtonText}>Use a different email</Text>
         </Pressable>
       ) : null}
@@ -289,13 +390,67 @@ function EmailCodeAuth() {
 
 function SignedInHome() {
   const { signOut } = useAuth();
+  const { isAuthenticated, isLoading } = useConvexAuth();
   const { user } = useUser();
-  const primaryEmail = user?.primaryEmailAddress?.emailAddress ?? "your account";
+  const syncCheck = useQuery(api.sync.current, isAuthenticated ? {} : "skip");
+  const ping = useMutation(api.sync.ping);
+  const primaryEmail =
+    user?.primaryEmailAddress?.emailAddress ?? "your account";
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const handleSync = async () => {
+    if (!isAuthenticated || isSyncing) {
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncError(null);
+
+    try {
+      await ping({});
+    } catch (error) {
+      setSyncError(getErrorMessage(error));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const lastSeenAt =
+    syncCheck === null || syncCheck === undefined
+      ? null
+      : new Date(syncCheck.lastSeenAt).toLocaleString();
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>You're signed in</Text>
       <Text style={styles.body}>Signed in as {primaryEmail}</Text>
+      <View style={styles.syncPanel}>
+        <Text style={styles.syncLabel}>Convex sync</Text>
+        <Text style={styles.syncValue}>
+          {isLoading
+            ? "Connecting..."
+            : isAuthenticated
+              ? `Authenticated${syncCheck ? ` - ${syncCheck.count} syncs` : ""}`
+              : "Not connected"}
+        </Text>
+        {lastSeenAt ? (
+          <Text style={styles.syncMeta}>Last sync: {lastSeenAt}</Text>
+        ) : null}
+        {syncError ? <Text style={styles.error}>{syncError}</Text> : null}
+        <Pressable
+          disabled={!isAuthenticated || isSyncing}
+          style={[
+            styles.primaryButton,
+            (!isAuthenticated || isSyncing) && styles.disabledButton,
+          ]}
+          onPress={handleSync}
+        >
+          <Text style={styles.primaryButtonText}>
+            {isSyncing ? "Syncing..." : "Sync now"}
+          </Text>
+        </Pressable>
+      </View>
       <Pressable style={styles.secondaryButton} onPress={() => signOut()}>
         <Text style={styles.secondaryButtonText}>Sign out</Text>
       </Pressable>
@@ -406,6 +561,34 @@ const styles = StyleSheet.create({
     color: "#b91c1c",
     fontSize: 14,
     lineHeight: 20,
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  syncPanel: {
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 4,
+    padding: 16,
+  },
+  syncLabel: {
+    color: "#111827",
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 6,
+    textAlign: "center",
+  },
+  syncValue: {
+    color: "#374151",
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  syncMeta: {
+    color: "#6b7280",
+    fontSize: 13,
+    lineHeight: 18,
     marginBottom: 12,
     textAlign: "center",
   },

@@ -15,16 +15,21 @@
     "react-native": "0.85.3"
   },
   "devDependencies": {
+    "@types/node": "^25.9.1",
     "@types/react": "~19.2.2",
+    "prettier": "^3.8.3",
     "typescript": "~6.0.3",
     "vitest": "^4.1.7"
   },
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
-    "ios": "expo start --ios",
+    "ios": "bun scripts/ios-launch.js",
     "web": "expo start --web",
     "check": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "fmt": "prettier --write .",
+    "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:all": "bun run check && bun run test",
