@@ -354,13 +354,24 @@ function SignedInHome() {
   const { signOut } = useAuth();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { user } = useUser();
+  const grades = useQuery(api.curriculum.grades, isAuthenticated ? {} : "skip");
+  const [selectedMode, setSelectedMode] = useState<
+    "home" | "games" | "lessons"
+  >("home");
+  const [selectedGradeLevel, setSelectedGradeLevel] = useState<number | null>(
+    null,
+  );
   const curriculum = useQuery(
-    api.curriculum.firstGrade,
-    isAuthenticated ? {} : "skip",
+    api.curriculum.byGrade,
+    isAuthenticated && selectedGradeLevel !== null
+      ? { gradeLevel: selectedGradeLevel }
+      : "skip",
   );
   const progress = useQuery(
-    api.curriculum.myFirstGradeProgress,
-    isAuthenticated ? {} : "skip",
+    api.curriculum.myProgressByGrade,
+    isAuthenticated && selectedGradeLevel !== null
+      ? { gradeLevel: selectedGradeLevel }
+      : "skip",
   );
   const recordAttempt = useMutation(api.curriculum.recordActivityAttempt);
   const primaryEmail =
@@ -381,7 +392,12 @@ function SignedInHome() {
   const totalLessons = lessons.length;
 
   const handleAnswer = async (answer: string) => {
-    if (!isAuthenticated || !selectedLesson || isSubmittingAnswer) {
+    if (
+      !isAuthenticated ||
+      !selectedLesson ||
+      selectedGradeLevel === null ||
+      isSubmittingAnswer
+    ) {
       return;
     }
 
@@ -391,6 +407,7 @@ function SignedInHome() {
 
     try {
       await recordAttempt({
+        gradeLevel: selectedGradeLevel,
         unitId: selectedLesson.unitId,
         lessonId: selectedLesson.id,
         activityId: `${selectedLesson.id}-check`,
@@ -403,16 +420,39 @@ function SignedInHome() {
     }
   };
 
-  if (isLoading || curriculum === undefined || progress === undefined) {
+  const goHome = () => {
+    setSelectedMode("home");
+    setSelectedGradeLevel(null);
+    setSelectedLessonId(null);
+    setSelectedAnswer(null);
+    setLessonError(null);
+  };
+
+  const chooseLessons = () => {
+    setSelectedMode("lessons");
+    setSelectedGradeLevel(null);
+    setSelectedLessonId(null);
+    setSelectedAnswer(null);
+    setLessonError(null);
+  };
+
+  const chooseGrade = (gradeLevel: number) => {
+    setSelectedGradeLevel(gradeLevel);
+    setSelectedLessonId(null);
+    setSelectedAnswer(null);
+    setLessonError(null);
+  };
+
+  if (isLoading || grades === undefined) {
     return (
       <View style={styles.container}>
         <ActivityIndicator />
-        <Text style={styles.body}>Loading first grade math...</Text>
+        <Text style={styles.body}>Loading math...</Text>
       </View>
     );
   }
 
-  if (!isAuthenticated || curriculum === null || selectedLesson === undefined) {
+  if (!isAuthenticated || grades === null) {
     return (
       <View style={styles.container}>
         <Text style={styles.title}>Math is loading</Text>
@@ -426,132 +466,232 @@ function SignedInHome() {
       <View style={styles.headerRow}>
         <View>
           <Text style={styles.eyebrow}>Signed in as {primaryEmail}</Text>
-          <Text style={styles.title}>{curriculum.title}</Text>
+          <Text style={styles.title}>Let's Learn Math</Text>
         </View>
         <Pressable style={styles.signOutButton} onPress={() => signOut()}>
           <Text style={styles.signOutButtonText}>Sign out</Text>
         </Pressable>
       </View>
 
-      <View style={styles.progressBand}>
-        <Text style={styles.progressTitle}>
-          {masteredLessons} of {totalLessons} lessons mastered
-        </Text>
-        <View style={styles.progressTrack}>
-          <View
-            style={[
-              styles.progressFill,
-              {
-                width: `${totalLessons === 0 ? 0 : (masteredLessons / totalLessons) * 100}%`,
-              },
-            ]}
-          />
+      {selectedMode !== "home" ? (
+        <Pressable style={styles.backButton} onPress={goHome}>
+          <Text style={styles.backButtonText}>Back to options</Text>
+        </Pressable>
+      ) : null}
+
+      {selectedMode === "home" ? (
+        <View style={styles.optionGrid}>
+          <Pressable
+            style={styles.optionPanel}
+            onPress={() => setSelectedMode("games")}
+          >
+            <Text style={styles.optionTitle}>Math Games</Text>
+            <Text style={styles.optionText}>
+              Play practice games. This section is ready for the games we build
+              next.
+            </Text>
+          </Pressable>
+          <Pressable style={styles.optionPanel} onPress={chooseLessons}>
+            <Text style={styles.optionTitle}>Math Lessons</Text>
+            <Text style={styles.optionText}>
+              Pick a grade, choose a lesson, study examples, then solve a
+              practice problem.
+            </Text>
+          </Pressable>
         </View>
-        <Text style={styles.progressText}>{curriculum.teachingNote}</Text>
-      </View>
+      ) : null}
 
-      <View style={styles.lessonLayout}>
-        <View style={styles.unitList}>
-          {curriculum.units.map((unit) => (
-            <View key={unit.id} style={styles.unitSection}>
-              <Text style={styles.unitTitle}>{unit.title}</Text>
-              <Text style={styles.unitGoal}>{unit.goal}</Text>
-              {unit.lessons.map((lesson) => {
-                const lessonProgress = progress.find(
-                  (row) => row.lessonId === lesson.id,
-                );
-                const isSelected = lesson.id === selectedLesson.id;
+      {selectedMode === "games" ? (
+        <View style={styles.emptyPanel}>
+          <Text style={styles.lessonTitle}>Math Games</Text>
+          <Text style={styles.lessonExplain}>
+            Games will live here. We can add fact fluency, number line races,
+            shape sorting, and timed review next.
+          </Text>
+        </View>
+      ) : null}
 
-                return (
-                  <Pressable
-                    key={lesson.id}
-                    style={[
-                      styles.lessonButton,
-                      isSelected && styles.lessonButtonSelected,
-                    ]}
-                    onPress={() => {
-                      setSelectedLessonId(lesson.id);
-                      setSelectedAnswer(null);
-                      setLessonError(null);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.lessonButtonTitle,
-                        isSelected && styles.lessonButtonTitleSelected,
-                      ]}
-                    >
-                      {lesson.title}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.lessonButtonMeta,
-                        isSelected && styles.lessonButtonMetaSelected,
-                      ]}
-                    >
-                      {lessonProgress?.status.replace("_", " ") ??
-                        "not started"}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+      {selectedMode === "lessons" && selectedGradeLevel === null ? (
+        <View>
+          <Text style={styles.sectionTitle}>Choose A Grade</Text>
+          <View style={styles.gradeGrid}>
+            {grades.map((grade) => (
+              <Pressable
+                key={grade.gradeLevel}
+                style={styles.gradeButton}
+                onPress={() => chooseGrade(grade.gradeLevel)}
+              >
+                <Text style={styles.gradeButtonTitle}>{grade.title}</Text>
+                <Text style={styles.gradeButtonText}>{grade.description}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      {selectedMode === "lessons" &&
+      selectedGradeLevel !== null &&
+      (curriculum === undefined || progress === undefined) ? (
+        <View style={styles.container}>
+          <ActivityIndicator />
+          <Text style={styles.body}>Loading grade {selectedGradeLevel}...</Text>
+        </View>
+      ) : null}
+
+      {selectedMode === "lessons" &&
+      selectedGradeLevel !== null &&
+      curriculum !== undefined &&
+      progress !== undefined &&
+      selectedLesson !== undefined ? (
+        <>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => {
+              setSelectedGradeLevel(null);
+              setSelectedLessonId(null);
+              setSelectedAnswer(null);
+              setLessonError(null);
+            }}
+          >
+            <Text style={styles.backButtonText}>Choose another grade</Text>
+          </Pressable>
+
+          <View style={styles.progressBand}>
+            <Text style={styles.progressTitle}>
+              {curriculum.title}: {masteredLessons} of {totalLessons} lessons
+              mastered
+            </Text>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    width: `${totalLessons === 0 ? 0 : (masteredLessons / totalLessons) * 100}%`,
+                  },
+                ]}
+              />
             </View>
-          ))}
-        </View>
-
-        <View style={styles.lessonPanel}>
-          <Text style={styles.lessonConcept}>{selectedLesson.concept}</Text>
-          <Text style={styles.lessonTitle}>{selectedLesson.title}</Text>
-          <Text style={styles.lessonExplain}>{selectedLesson.explanation}</Text>
-
-          <LessonVisual
-            model={selectedLesson.visualModel}
-            numbers={selectedLesson.visualNumbers}
-          />
-
-          <Text style={styles.practicePrompt}>{selectedLesson.prompt}</Text>
-          <View style={styles.choiceRow}>
-            {selectedLesson.choices.map((choice) => {
-              const isChosen = selectedAnswer === choice;
-              const isCorrect = choice === selectedLesson.correctAnswer;
-
-              return (
-                <Pressable
-                  key={choice}
-                  disabled={isSubmittingAnswer}
-                  style={[
-                    styles.choiceButton,
-                    isChosen && isCorrect && styles.choiceCorrect,
-                    isChosen && !isCorrect && styles.choiceIncorrect,
-                    isSubmittingAnswer && styles.disabledButton,
-                  ]}
-                  onPress={() => handleAnswer(choice)}
-                >
-                  <Text style={styles.choiceButtonText}>{choice}</Text>
-                </Pressable>
-              );
-            })}
+            <Text style={styles.progressText}>{curriculum.teachingNote}</Text>
           </View>
 
-          {selectedAnswer ? (
-            <Text style={styles.feedbackText}>
-              {selectedAnswer === selectedLesson.correctAnswer
-                ? "Yes. That is right."
-                : "Try again. Look at the picture."}
-            </Text>
-          ) : null}
-          {lessonError ? <Text style={styles.error}>{lessonError}</Text> : null}
+          <View style={styles.lessonLayout}>
+            <View style={styles.unitList}>
+              {curriculum.units.map((unit) => (
+                <View key={unit.id} style={styles.unitSection}>
+                  <Text style={styles.unitTitle}>{unit.title}</Text>
+                  <Text style={styles.unitGoal}>{unit.goal}</Text>
+                  {unit.lessons.map((lesson) => {
+                    const lessonProgress = progress.find(
+                      (row) => row.lessonId === lesson.id,
+                    );
+                    const isSelected = lesson.id === selectedLesson.id;
 
-          <View style={styles.masteryBox}>
-            <Text style={styles.masteryLabel}>Mastery</Text>
-            <Text style={styles.masteryValue}>
-              {selectedProgress
-                ? `${selectedProgress.masteryScore}% after ${selectedProgress.attemptCount} tries`
-                : "Practice to start"}
-            </Text>
+                    return (
+                      <Pressable
+                        key={lesson.id}
+                        style={[
+                          styles.lessonButton,
+                          isSelected && styles.lessonButtonSelected,
+                        ]}
+                        onPress={() => {
+                          setSelectedLessonId(lesson.id);
+                          setSelectedAnswer(null);
+                          setLessonError(null);
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.lessonButtonTitle,
+                            isSelected && styles.lessonButtonTitleSelected,
+                          ]}
+                        >
+                          {lesson.title}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.lessonButtonMeta,
+                            isSelected && styles.lessonButtonMetaSelected,
+                          ]}
+                        >
+                          {lessonProgress?.status.replace("_", " ") ??
+                            "not started"}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.lessonPanel}>
+              <Text style={styles.lessonConcept}>{selectedLesson.concept}</Text>
+              <Text style={styles.lessonTitle}>{selectedLesson.title}</Text>
+              <Text style={styles.lessonExplain}>
+                {selectedLesson.explanation}
+              </Text>
+
+              <View style={styles.examplesStack}>
+                {selectedLesson.examples.map((example, index) => (
+                  <View key={example.id} style={styles.exampleBlock}>
+                    <Text style={styles.exampleLabel}>Example {index + 1}</Text>
+                    <Text style={styles.exampleText}>
+                      {example.explanation}
+                    </Text>
+                    <LessonVisual
+                      model={selectedLesson.visualModel}
+                      numbers={example.visualNumbers}
+                    />
+                  </View>
+                ))}
+              </View>
+
+              <Text style={styles.practicePrompt}>{selectedLesson.prompt}</Text>
+              <View style={styles.choiceRow}>
+                {selectedLesson.choices.map((choice) => {
+                  const isChosen = selectedAnswer === choice;
+                  const isCorrect = choice === selectedLesson.correctAnswer;
+
+                  return (
+                    <Pressable
+                      key={choice}
+                      disabled={isSubmittingAnswer}
+                      style={[
+                        styles.choiceButton,
+                        isChosen && isCorrect && styles.choiceCorrect,
+                        isChosen && !isCorrect && styles.choiceIncorrect,
+                        isSubmittingAnswer && styles.disabledButton,
+                      ]}
+                      onPress={() => handleAnswer(choice)}
+                    >
+                      <Text style={styles.choiceButtonText}>{choice}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {selectedAnswer ? (
+                <Text style={styles.feedbackText}>
+                  {selectedAnswer === selectedLesson.correctAnswer
+                    ? "Yes. That is right."
+                    : "Try again. Look at the picture."}
+                </Text>
+              ) : null}
+              {lessonError ? (
+                <Text style={styles.error}>{lessonError}</Text>
+              ) : null}
+
+              <View style={styles.masteryBox}>
+                <Text style={styles.masteryLabel}>Mastery</Text>
+                <Text style={styles.masteryValue}>
+                  {selectedProgress
+                    ? `${selectedProgress.masteryScore}% after ${selectedProgress.attemptCount} tries`
+                    : "Practice to start"}
+                </Text>
+              </View>
+            </View>
           </View>
-        </View>
-      </View>
+        </>
+      ) : null}
     </ScrollView>
   );
 }
@@ -856,6 +996,76 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
   },
+  backButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  backButtonText: {
+    color: "#2563eb",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  optionGrid: {
+    gap: 14,
+  },
+  optionPanel: {
+    backgroundColor: "#f8fafc",
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 18,
+  },
+  optionTitle: {
+    color: "#0f172a",
+    fontSize: 22,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
+  optionText: {
+    color: "#475569",
+    fontSize: 16,
+    lineHeight: 23,
+  },
+  emptyPanel: {
+    backgroundColor: "#f8fafc",
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 18,
+  },
+  sectionTitle: {
+    color: "#0f172a",
+    fontSize: 22,
+    fontWeight: "900",
+    marginBottom: 12,
+  },
+  gradeGrid: {
+    gap: 10,
+  },
+  gradeButton: {
+    backgroundColor: "#ffffff",
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 14,
+  },
+  gradeButtonTitle: {
+    color: "#0f172a",
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 4,
+  },
+  gradeButtonText: {
+    color: "#475569",
+    fontSize: 14,
+    lineHeight: 20,
+  },
   progressBand: {
     backgroundColor: "#f8fafc",
     borderColor: "#cbd5e1",
@@ -963,6 +1173,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 23,
     marginBottom: 14,
+  },
+  examplesStack: {
+    gap: 12,
+    marginBottom: 16,
+  },
+  exampleBlock: {
+    backgroundColor: "#f8fafc",
+    borderColor: "#e2e8f0",
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 12,
+  },
+  exampleLabel: {
+    color: "#2563eb",
+    fontSize: 12,
+    fontWeight: "900",
+    marginBottom: 4,
+    textTransform: "uppercase",
+  },
+  exampleText: {
+    color: "#0f172a",
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 21,
+    marginBottom: 10,
   },
   tenFrame: {
     borderColor: "#0f172a",

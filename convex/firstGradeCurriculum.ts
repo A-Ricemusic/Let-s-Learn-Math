@@ -23,6 +23,12 @@ export type FirstGradeLesson = {
   visualNumbers: number[];
 };
 
+export type LessonExample = {
+  id: string;
+  explanation: string;
+  visualNumbers: number[];
+};
+
 export type FirstGradeUnit = {
   id: string;
   title: string;
@@ -292,3 +298,125 @@ export const firstGradeUnits: FirstGradeUnit[] = [
     ],
   },
 ];
+
+export function getLessonExamples(lesson: FirstGradeLesson): LessonExample[] {
+  const [first = 0, second = 0] = lesson.visualNumbers;
+
+  if (lesson.visualModel === "ten_frame") {
+    return [
+      {
+        id: `${lesson.id}-example-1`,
+        explanation: `${first} dots are already in the frame.`,
+        visualNumbers: [first],
+      },
+      {
+        id: `${lesson.id}-example-2`,
+        explanation: `${10 - first} empty spaces are left.`,
+        visualNumbers: [first],
+      },
+      {
+        id: `${lesson.id}-example-3`,
+        explanation: `${first} and ${10 - first} make 10.`,
+        visualNumbers: [10],
+      },
+    ];
+  }
+
+  if (lesson.visualModel === "object_groups") {
+    return [
+      {
+        id: `${lesson.id}-example-1`,
+        explanation: `Start with ${first}.`,
+        visualNumbers: [first, 0],
+      },
+      {
+        id: `${lesson.id}-example-2`,
+        explanation: `Add ${second} more.`,
+        visualNumbers: [first, second],
+      },
+      {
+        id: `${lesson.id}-example-3`,
+        explanation: `Count them all to get ${first + second}.`,
+        visualNumbers: [first + second, 0],
+      },
+    ];
+  }
+
+  if (lesson.visualModel === "take_away") {
+    return [
+      {
+        id: `${lesson.id}-example-1`,
+        explanation: `Start with ${first}.`,
+        visualNumbers: [first, 0],
+      },
+      {
+        id: `${lesson.id}-example-2`,
+        explanation: `Take away ${second}.`,
+        visualNumbers: [first, second],
+      },
+      {
+        id: `${lesson.id}-example-3`,
+        explanation: `${first - second} are left.`,
+        visualNumbers: [first - second, 0],
+      },
+    ];
+  }
+
+  if (lesson.visualModel === "number_line") {
+    return [
+      {
+        id: `${lesson.id}-example-1`,
+        explanation: `Put your finger on ${first}.`,
+        visualNumbers: [first, 0],
+      },
+      {
+        id: `${lesson.id}-example-2`,
+        explanation: `${second > 0 ? "Jump forward" : "Jump back"} ${Math.abs(second)} spaces.`,
+        visualNumbers: [first, second],
+      },
+      {
+        id: `${lesson.id}-example-3`,
+        explanation: `You land on ${first + second}.`,
+        visualNumbers: [first + second, 0],
+      },
+    ];
+  }
+
+  if (lesson.visualModel === "base_ten") {
+    return [
+      {
+        id: `${lesson.id}-example-1`,
+        explanation: `The tens place shows ${first} tens.`,
+        visualNumbers: [first, 0],
+      },
+      {
+        id: `${lesson.id}-example-2`,
+        explanation: `The ones place shows ${second} ones.`,
+        visualNumbers: [0, second],
+      },
+      {
+        id: `${lesson.id}-example-3`,
+        explanation: `${first} tens and ${second} ones make ${first}${second}.`,
+        visualNumbers: [first, second],
+      },
+    ];
+  }
+
+  return [
+    {
+      id: `${lesson.id}-example-1`,
+      explanation: "Look at the picture.",
+      visualNumbers: lesson.visualNumbers,
+    },
+    {
+      id: `${lesson.id}-example-2`,
+      explanation: "Say what you notice.",
+      visualNumbers: lesson.visualNumbers,
+    },
+    {
+      id: `${lesson.id}-example-3`,
+      explanation: "Use the picture to answer.",
+      visualNumbers: lesson.visualNumbers,
+    },
+  ];
+}
