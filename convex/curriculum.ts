@@ -1,118 +1,27 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { firstGradeUnits, getLessonExamples } from "./firstGradeCurriculum";
+import { calculateLessonMastery } from "../src/features/lessons/mastery";
+import {
+  ensureLearnerProfile,
+  getAuthenticatedIdentity,
+} from "../src/server/auth";
+import {
+  findCurriculumQuestion,
+  getGradeUnits,
+  gradeOptions,
+} from "../src/server/curriculum";
+import type { Doc } from "./_generated/dataModel";
 
-const gradeOptions = Array.from({ length: 12 }, (_, index) => {
-  const gradeLevel = index + 1;
+function toProgressSummary(row: Doc<"lessonProgress">) {
   return {
-    gradeLevel,
-    title: `Grade ${gradeLevel}`,
-    description:
-      gradeLevel === 1
-        ? "Making ten, addition, subtraction, place value, time, measurement, and shapes."
-        : "Starter lesson path ready. Full curriculum will be expanded next.",
+    lessonId: row.lessonId,
+    unitId: row.unitId,
+    status: row.status,
+    correctCount: row.correctCount,
+    attemptCount: row.attemptCount,
+    masteryScore: row.masteryScore,
+    lastPracticedAt: row.lastPracticedAt,
   };
-});
-
-function getStarterGradeUnits(gradeLevel: number) {
-  return [
-    {
-      id: `grade-${gradeLevel}-foundations`,
-      title: `Grade ${gradeLevel} Foundations`,
-      goal: "Start with a clear example, then solve a practice problem.",
-      lessons: [
-        {
-          id: `grade-${gradeLevel}-number-thinking`,
-          unitId: `grade-${gradeLevel}-foundations`,
-          title: "Number Thinking",
-          concept: "Number sense",
-          explanation:
-            "Use a picture, a pattern, or a number line to understand the problem.",
-          visualModel: "number_line",
-          masteryTarget: 80,
-          prompt: `${gradeLevel * 3} + ${gradeLevel} = ?`,
-          correctAnswer: String(gradeLevel * 4),
-          choices: [
-            String(gradeLevel * 4 - 1),
-            String(gradeLevel * 4),
-            String(gradeLevel * 4 + 1),
-          ],
-          visualNumbers: [gradeLevel * 3, gradeLevel],
-          examples: [
-            {
-              id: `grade-${gradeLevel}-number-thinking-example-1`,
-              explanation: `Start at ${gradeLevel * 3}.`,
-              visualNumbers: [gradeLevel * 3, 0],
-            },
-            {
-              id: `grade-${gradeLevel}-number-thinking-example-2`,
-              explanation: `Move forward ${gradeLevel}.`,
-              visualNumbers: [gradeLevel * 3, gradeLevel],
-            },
-            {
-              id: `grade-${gradeLevel}-number-thinking-example-3`,
-              explanation: `You land on ${gradeLevel * 4}.`,
-              visualNumbers: [gradeLevel * 4, 0],
-            },
-          ],
-        },
-      ],
-    },
-  ];
-}
-
-function getGradeUnits(gradeLevel: number) {
-  if (gradeLevel === 1) {
-    return firstGradeUnits.map((unit) => ({
-      ...unit,
-      lessons: unit.lessons.map((lesson) => ({
-        ...lesson,
-        examples: getLessonExamples(lesson),
-      })),
-    }));
-  }
-
-  return getStarterGradeUnits(gradeLevel);
-}
-
-async function getAuthenticatedIdentity(ctx: QueryCtx | MutationCtx) {
-  const identity = await ctx.auth.getUserIdentity();
-
-  if (identity === null) {
-    throw new Error("Not authenticated");
-  }
-
-  return identity;
-}
-
-async function ensureLearnerProfile(ctx: MutationCtx) {
-  const identity = await getAuthenticatedIdentity(ctx);
-  const now = Date.now();
-  const existing = await ctx.db
-    .query("learnerProfiles")
-    .withIndex("by_tokenIdentifier", (q) =>
-      q.eq("tokenIdentifier", identity.tokenIdentifier),
-    )
-    .unique();
-
-  if (existing !== null) {
-    await ctx.db.patch(existing._id, {
-      email: identity.email,
-      displayName: identity.name,
-      updatedAt: now,
-    });
-    return existing._id;
-  }
-
-  return await ctx.db.insert("learnerProfiles", {
-    tokenIdentifier: identity.tokenIdentifier,
-    email: identity.email,
-    displayName: identity.name,
-    activeGradeLevel: 1,
-    createdAt: now,
-    updatedAt: now,
-  });
 }
 
 export const firstGrade = query({
@@ -173,17 +82,9 @@ export const myProgressByGrade = query({
           .eq("tokenIdentifier", identity.tokenIdentifier)
           .eq("gradeLevel", args.gradeLevel),
       )
-      .collect();
+      .take(100);
 
-    return rows.map((row) => ({
-      lessonId: row.lessonId,
-      unitId: row.unitId,
-      status: row.status,
-      correctCount: row.correctCount,
-      attemptCount: row.attemptCount,
-      masteryScore: row.masteryScore,
-      lastPracticedAt: row.lastPracticedAt,
-    }));
+    return rows.map(toProgressSummary);
   },
 });
 
@@ -196,17 +97,9 @@ export const myFirstGradeProgress = query({
       .withIndex("by_tokenIdentifier_and_gradeLevel", (q) =>
         q.eq("tokenIdentifier", identity.tokenIdentifier).eq("gradeLevel", 1),
       )
-      .collect();
+      .take(100);
 
-    return rows.map((row) => ({
-      lessonId: row.lessonId,
-      unitId: row.unitId,
-      status: row.status,
-      correctCount: row.correctCount,
-      attemptCount: row.attemptCount,
-      masteryScore: row.masteryScore,
-      lastPracticedAt: row.lastPracticedAt,
-    }));
+    return rows.map(toProgressSummary);
   },
 });
 
@@ -216,11 +109,23 @@ export const recordActivityAttempt = mutation({
     unitId: v.string(),
     lessonId: v.string(),
     activityId: v.string(),
-    isCorrect: v.boolean(),
+    selectedAnswer: v.string(),
   },
   handler: async (ctx, args) => {
     const identity = await getAuthenticatedIdentity(ctx);
-    await ensureLearnerProfile(ctx);
+    await ensureLearnerProfile(ctx, identity);
+    const question = findCurriculumQuestion({
+      gradeLevel: args.gradeLevel,
+      unitId: args.unitId,
+      lessonId: args.lessonId,
+      activityId: args.activityId,
+    });
+
+    if (question === null) {
+      throw new Error("Activity not found");
+    }
+
+    const isCorrect = args.selectedAnswer === question.correctAnswer;
 
     const now = Date.now();
     await ctx.db.insert("activityAttempts", {
@@ -229,7 +134,7 @@ export const recordActivityAttempt = mutation({
       unitId: args.unitId,
       lessonId: args.lessonId,
       activityId: args.activityId,
-      isCorrect: args.isCorrect,
+      isCorrect,
       createdAt: now,
     });
 
@@ -244,11 +149,12 @@ export const recordActivityAttempt = mutation({
 
     const previousCorrect = existing?.correctCount ?? 0;
     const previousAttempts = existing?.attemptCount ?? 0;
-    const correctCount = previousCorrect + (args.isCorrect ? 1 : 0);
-    const attemptCount = previousAttempts + 1;
-    const masteryScore = Math.round((correctCount / attemptCount) * 100);
-    const status =
-      masteryScore >= 80 && attemptCount >= 3 ? "mastered" : "in_progress";
+    const { correctCount, attemptCount, masteryScore, status } =
+      calculateLessonMastery({
+        previousCorrect,
+        previousAttempts,
+        isCorrect,
+      });
 
     if (existing === null) {
       await ctx.db.insert("lessonProgress", {

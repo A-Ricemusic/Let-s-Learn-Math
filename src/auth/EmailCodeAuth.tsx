@@ -1,0 +1,247 @@
+import { useSignIn, useSignUp } from "@clerk/clerk-expo";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { styles } from "../styles/styles";
+import { getErrorMessage } from "../utils/errors";
+
+type AuthStep = "intro" | "email" | "code";
+type PendingFlow = "signIn" | "signUp";
+type AuthMode = "signIn" | "signUp";
+
+export function EmailCodeAuth() {
+  const { isLoaded: isSignInLoaded, signIn, setActive } = useSignIn();
+  const { isLoaded: isSignUpLoaded, signUp } = useSignUp();
+  const [step, setStep] = useState<AuthStep>("intro");
+  const [authMode, setAuthMode] = useState<AuthMode>("signIn");
+  const [pendingFlow, setPendingFlow] = useState<PendingFlow | null>(null);
+  const [emailAddress, setEmailAddress] = useState("");
+  const [code, setCode] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const isLoaded = isSignInLoaded && isSignUpLoaded;
+
+  const handleEmailSubmit = async () => {
+    const trimmedEmail = emailAddress.trim();
+
+    if (!trimmedEmail) {
+      setErrorMessage("Enter your email address.");
+      return;
+    }
+
+    if (!isLoaded || !signIn || !signUp) {
+      setErrorMessage("Clerk is still loading. Please try again.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    if (authMode === "signIn") {
+      try {
+        await signIn.create({
+          identifier: trimmedEmail,
+          strategy: "email_code",
+        });
+        setPendingFlow("signIn");
+        setStep("code");
+        setIsSubmitting(false);
+        return;
+      } catch (error) {
+        setErrorMessage(getErrorMessage(error));
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    try {
+      await signUp.create({
+        emailAddress: trimmedEmail,
+      });
+      await signUp.prepareEmailAddressVerification({
+        strategy: "email_code",
+      });
+      setPendingFlow("signUp");
+      setStep("code");
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCodeSubmit = async () => {
+    const trimmedCode = code.trim();
+
+    if (!trimmedCode) {
+      setErrorMessage("Enter the code from your email.");
+      return;
+    }
+
+    if (!isLoaded || !signIn || !signUp || !setActive || !pendingFlow) {
+      setErrorMessage("The sign-in flow is not ready. Please start again.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      if (pendingFlow === "signIn") {
+        const result = await signIn.attemptFirstFactor({
+          strategy: "email_code",
+          code: trimmedCode,
+        });
+
+        if (result.status === "complete" && result.createdSessionId) {
+          await setActive({ session: result.createdSessionId });
+          return;
+        }
+      } else {
+        const result = await signUp.attemptEmailAddressVerification({
+          code: trimmedCode,
+        });
+
+        if (result.status === "complete" && result.createdSessionId) {
+          await setActive({ session: result.createdSessionId });
+          return;
+        }
+      }
+
+      setErrorMessage(
+        "Additional verification is required. We will support that flow later.",
+      );
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const goBackToEmail = () => {
+    setStep("email");
+    setCode("");
+    setPendingFlow(null);
+    setErrorMessage(null);
+  };
+
+  const startAuthFlow = (mode: AuthMode) => {
+    setAuthMode(mode);
+    setStep("email");
+    setCode("");
+    setPendingFlow(null);
+    setErrorMessage(null);
+  };
+
+  if (!isLoaded) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator />
+        <Text style={styles.body}>Loading authentication...</Text>
+      </View>
+    );
+  }
+
+  if (step === "intro") {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Let's Learn Math</Text>
+        <Text style={styles.body}>
+          Use your email to continue without a password.
+        </Text>
+        <Pressable
+          style={styles.primaryButton}
+          onPress={() => startAuthFlow("signIn")}
+        >
+          <Text style={styles.primaryButtonText}>Sign in</Text>
+        </Pressable>
+        <Pressable
+          style={styles.secondaryButton}
+          onPress={() => startAuthFlow("signUp")}
+        >
+          <Text style={styles.secondaryButtonText}>Sign up</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>
+        {step === "email"
+          ? authMode === "signIn"
+            ? "Sign in"
+            : "Create your account"
+          : "Check your email"}
+      </Text>
+      <Text style={styles.body}>
+        {step === "email"
+          ? "We will send you a one-time code."
+          : `Enter the code sent to ${emailAddress.trim()}.`}
+      </Text>
+
+      {step === "email" ? (
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!isSubmitting}
+          keyboardType="email-address"
+          onChangeText={setEmailAddress}
+          placeholder="you@example.com"
+          style={styles.input}
+          textContentType="emailAddress"
+          value={emailAddress}
+        />
+      ) : (
+        <TextInput
+          autoCapitalize="none"
+          editable={!isSubmitting}
+          keyboardType="number-pad"
+          onChangeText={setCode}
+          placeholder="123456"
+          style={styles.input}
+          textContentType="oneTimeCode"
+          value={code}
+        />
+      )}
+
+      {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+
+      <Pressable
+        disabled={isSubmitting}
+        style={[styles.primaryButton, isSubmitting && styles.disabledButton]}
+        onPress={step === "email" ? handleEmailSubmit : handleCodeSubmit}
+      >
+        <Text style={styles.primaryButtonText}>
+          {isSubmitting ? "Please wait..." : "Continue"}
+        </Text>
+      </Pressable>
+
+      {step === "email" ? (
+        <Pressable
+          disabled={isSubmitting}
+          style={styles.textButton}
+          onPress={() => setStep("intro")}
+        >
+          <Text style={styles.textButtonText}>Back</Text>
+        </Pressable>
+      ) : null}
+
+      {step === "code" ? (
+        <Pressable
+          disabled={isSubmitting}
+          style={styles.textButton}
+          onPress={goBackToEmail}
+        >
+          <Text style={styles.textButtonText}>Use a different email</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}

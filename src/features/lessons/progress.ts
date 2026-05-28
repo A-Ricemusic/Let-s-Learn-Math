@@ -1,4 +1,7 @@
-export function getLessonProgressPercent(progressSeconds: number, durationMinutes: number) {
+export function getLessonProgressPercent(
+  progressSeconds: number,
+  durationMinutes: number,
+) {
   if (durationMinutes <= 0 || progressSeconds <= 0) {
     return 0;
   }

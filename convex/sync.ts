@@ -1,15 +1,8 @@
 import { mutation, query } from "./_generated/server";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
-
-async function getAuthenticatedIdentity(ctx: QueryCtx | MutationCtx) {
-  const identity = await ctx.auth.getUserIdentity();
-
-  if (identity === null) {
-    throw new Error("Not authenticated");
-  }
-
-  return identity;
-}
+import {
+  getAuthenticatedIdentity,
+  optionalAuthString,
+} from "../src/server/auth";
 
 export const current = query({
   args: {},
@@ -40,6 +33,7 @@ export const ping = mutation({
   handler: async (ctx) => {
     const identity = await getAuthenticatedIdentity(ctx);
     const now = Date.now();
+    const email = optionalAuthString(identity.email);
     const existing = await ctx.db
       .query("syncChecks")
       .withIndex("by_tokenIdentifier", (q) =>
@@ -50,7 +44,7 @@ export const ping = mutation({
     if (existing === null) {
       const syncCheckId = await ctx.db.insert("syncChecks", {
         tokenIdentifier: identity.tokenIdentifier,
-        email: identity.email,
+        email,
         lastSeenAt: now,
         count: 1,
       });
@@ -64,7 +58,7 @@ export const ping = mutation({
 
     const count = existing.count + 1;
     await ctx.db.patch(existing._id, {
-      email: identity.email,
+      email,
       lastSeenAt: now,
       count,
     });
