@@ -80,8 +80,10 @@ type CurriculumSection = {
   lessons: SectionLesson[];
 };
 type SectionPlan = {
-  examples: SectionExample[];
-  practice: SectionQuestion[];
+  examples: Array<{
+    example: SectionExample;
+    practice: SectionQuestion[];
+  }>;
   quiz: SectionQuestion[];
 };
 
@@ -623,128 +625,120 @@ function SignedInHome() {
           </View>
 
           <View style={styles.lessonLayout}>
-            <View style={styles.unitList}>
-              {curriculum.units.map((unit) => (
-                <View key={unit.id} style={styles.unitSection}>
-                  {(() => {
-                    const unitProgress = progress.find(
-                      (row) => row.lessonId === unit.id,
-                    );
-                    const isSelected = unit.id === selectedSection?.id;
-
-                    return (
-                      <Pressable
-                        style={[
-                          styles.lessonButton,
-                          isSelected && styles.lessonButtonSelected,
-                        ]}
-                        onPress={() => {
-                          setSelectedSectionId(unit.id);
-                          setSelectedAnswers({});
-                          setLessonError(null);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.lessonButtonTitle,
-                            isSelected && styles.lessonButtonTitleSelected,
-                          ]}
-                        >
-                          {unit.title}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.lessonButtonGoal,
-                            isSelected && styles.lessonButtonMetaSelected,
-                          ]}
-                        >
-                          {unit.goal}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.lessonButtonMeta,
-                            isSelected && styles.lessonButtonMetaSelected,
-                          ]}
-                        >
-                          {unitProgress?.status.replace("_", " ") ??
-                            "not started"}
-                        </Text>
-                      </Pressable>
-                    );
-                  })()}
-                </View>
-              ))}
-            </View>
-
             {selectedSection === null || sectionPlan === null ? (
-              <View style={styles.lessonPanel}>
-                <Text style={styles.lessonTitle}>Choose a section</Text>
-                <Text style={styles.lessonExplain}>
-                  Tap Making Ten or another section to open its lesson page.
-                </Text>
+              <View style={styles.unitList}>
+                {curriculum.units.map((unit) => (
+                  <View key={unit.id} style={styles.unitSection}>
+                    {(() => {
+                      const unitProgress = progress.find(
+                        (row) => row.lessonId === unit.id,
+                      );
+
+                      return (
+                        <Pressable
+                          style={styles.lessonButton}
+                          onPress={() => {
+                            setSelectedSectionId(unit.id);
+                            setSelectedAnswers({});
+                            setLessonError(null);
+                          }}
+                        >
+                          <Text style={styles.lessonButtonTitle}>
+                            {unit.title}
+                          </Text>
+                          <Text style={styles.lessonButtonGoal}>
+                            {unit.goal}
+                          </Text>
+                          <Text style={styles.lessonButtonMeta}>
+                            {unitProgress?.status.replace("_", " ") ??
+                              "not started"}
+                          </Text>
+                        </Pressable>
+                      );
+                    })()}
+                  </View>
+                ))}
               </View>
             ) : (
-              <View style={styles.lessonPanel}>
-                <Text style={styles.lessonConcept}>
-                  {selectedSection.title}
-                </Text>
-                <Text style={styles.lessonTitle}>{selectedSection.title}</Text>
-                <Text style={styles.lessonExplain}>{selectedSection.goal}</Text>
+              <View>
+                <Pressable
+                  style={styles.backButton}
+                  onPress={() => {
+                    setSelectedSectionId(null);
+                    setSelectedAnswers({});
+                    setLessonError(null);
+                  }}
+                >
+                  <Text style={styles.backButtonText}>Back to sections</Text>
+                </Pressable>
 
-                <View style={styles.examplesStack}>
-                  {sectionPlan.examples.map((example, index) => (
-                    <View key={example.id} style={styles.exampleBlock}>
+                <View style={styles.lessonPanel}>
+                  <Text style={styles.lessonConcept}>
+                    {selectedSection.title}
+                  </Text>
+                  <Text style={styles.lessonTitle}>
+                    {selectedSection.title}
+                  </Text>
+                  <Text style={styles.lessonExplain}>
+                    {selectedSection.goal}
+                  </Text>
+
+                  {sectionPlan.examples.map((exampleGroup, exampleIndex) => (
+                    <View
+                      key={exampleGroup.example.id}
+                      style={styles.exampleBlock}
+                    >
                       <Text style={styles.exampleLabel}>
-                        Example {index + 1}
+                        Example {exampleIndex + 1}
                       </Text>
                       <Text style={styles.exampleText}>
-                        {example.explanation}
+                        {exampleGroup.example.explanation}
                       </Text>
                       <LessonVisual
-                        model={example.visualModel}
-                        numbers={example.visualNumbers}
+                        model={exampleGroup.example.visualModel}
+                        numbers={exampleGroup.example.visualNumbers}
                       />
+
+                      <Text style={styles.sectionTitle}>Practice</Text>
+                      {exampleGroup.practice.map((question, practiceIndex) => (
+                        <QuestionBlock
+                          key={question.id}
+                          disabled={isSubmittingAnswer}
+                          index={practiceIndex}
+                          label="Practice"
+                          onAnswer={handleAnswer}
+                          question={question}
+                          selectedAnswer={selectedAnswers[question.id]}
+                        />
+                      ))}
                     </View>
                   ))}
-                </View>
 
-                <Text style={styles.sectionTitle}>Practice</Text>
-                {sectionPlan.practice.map((question, index) => (
-                  <QuestionBlock
-                    key={question.id}
-                    disabled={isSubmittingAnswer}
-                    index={index}
-                    label="Practice"
-                    onAnswer={handleAnswer}
-                    question={question}
-                    selectedAnswer={selectedAnswers[question.id]}
-                  />
-                ))}
+                  <Text style={styles.sectionTitle}>Quiz</Text>
+                  {sectionPlan.quiz.map((question, index) => (
+                    <QuestionBlock
+                      key={question.id}
+                      disabled={isSubmittingAnswer}
+                      index={index}
+                      label="Question"
+                      onAnswer={handleAnswer}
+                      question={question}
+                      selectedAnswer={selectedAnswers[question.id]}
+                    />
+                  ))}
 
-                <Text style={styles.sectionTitle}>Quiz</Text>
-                {sectionPlan.quiz.map((question, index) => (
-                  <QuestionBlock
-                    key={question.id}
-                    disabled={isSubmittingAnswer}
-                    index={index}
-                    label="Question"
-                    onAnswer={handleAnswer}
-                    question={question}
-                    selectedAnswer={selectedAnswers[question.id]}
-                  />
-                ))}
+                  {lessonError ? (
+                    <Text style={styles.error}>{lessonError}</Text>
+                  ) : null}
 
-                {lessonError ? (
-                  <Text style={styles.error}>{lessonError}</Text>
-                ) : null}
-
-                <View style={styles.masteryBox}>
-                  <Text style={styles.masteryLabel}>Mastery</Text>
-                  <Text style={styles.masteryValue}>
-                    {selectedProgress
-                      ? `${selectedProgress.masteryScore}% after ${selectedProgress.attemptCount} tries`
-                      : "Practice to start"}
-                  </Text>
+                  <View style={styles.masteryBox}>
+                    <Text style={styles.masteryLabel}>Mastery</Text>
+                    <Text style={styles.masteryValue}>
+                      {selectedProgress
+                        ? `${selectedProgress.masteryScore}% after ${selectedProgress.attemptCount} tries`
+                        : "Practice to start"}
+                    </Text>
+                  </View>
                 </View>
               </View>
             )}
@@ -952,10 +946,13 @@ function buildSectionPlan(section: CurriculumSection): SectionPlan {
       })),
     )
     .slice(0, 3);
+  const filledExamples = fillExamples(section, examples);
 
   return {
-    examples: fillExamples(section, examples),
-    practice: buildQuestions(section, "practice", 3),
+    examples: filledExamples.map((example, index) => ({
+      example,
+      practice: buildQuestions(section, `practice-${index + 1}`, 3),
+    })),
     quiz: buildQuestions(section, "quiz", 5),
   };
 }
@@ -988,7 +985,7 @@ function fillExamples(
 
 function buildQuestions(
   section: CurriculumSection,
-  kind: "practice" | "quiz",
+  kind: string,
   count: number,
 ): SectionQuestion[] {
   if (section.lessons.length === 0) {
