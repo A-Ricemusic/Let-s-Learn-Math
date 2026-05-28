@@ -21,6 +21,7 @@ import {
   ActivityIndicator,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -353,68 +354,342 @@ function SignedInHome() {
   const { signOut } = useAuth();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { user } = useUser();
-  const syncCheck = useQuery(api.sync.current, isAuthenticated ? {} : "skip");
-  const ping = useMutation(api.sync.ping);
+  const curriculum = useQuery(
+    api.curriculum.firstGrade,
+    isAuthenticated ? {} : "skip",
+  );
+  const progress = useQuery(
+    api.curriculum.myFirstGradeProgress,
+    isAuthenticated ? {} : "skip",
+  );
+  const recordAttempt = useMutation(api.curriculum.recordActivityAttempt);
   const primaryEmail =
     user?.primaryEmailAddress?.emailAddress ?? "your account";
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
+  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
+  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+  const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
+  const [lessonError, setLessonError] = useState<string | null>(null);
 
-  const handleSync = async () => {
-    if (!isAuthenticated || isSyncing) {
+  const lessons = curriculum?.units.flatMap((unit) => unit.lessons) ?? [];
+  const selectedLesson =
+    lessons.find((lesson) => lesson.id === selectedLessonId) ?? lessons[0];
+  const selectedProgress = progress?.find(
+    (row) => row.lessonId === selectedLesson?.id,
+  );
+  const masteredLessons =
+    progress?.filter((row) => row.status === "mastered").length ?? 0;
+  const totalLessons = lessons.length;
+
+  const handleAnswer = async (answer: string) => {
+    if (!isAuthenticated || !selectedLesson || isSubmittingAnswer) {
       return;
     }
 
-    setIsSyncing(true);
-    setSyncError(null);
+    setSelectedAnswer(answer);
+    setIsSubmittingAnswer(true);
+    setLessonError(null);
 
     try {
-      await ping({});
+      await recordAttempt({
+        unitId: selectedLesson.unitId,
+        lessonId: selectedLesson.id,
+        activityId: `${selectedLesson.id}-check`,
+        isCorrect: answer === selectedLesson.correctAnswer,
+      });
     } catch (error) {
-      setSyncError(getErrorMessage(error));
+      setLessonError(getErrorMessage(error));
     } finally {
-      setIsSyncing(false);
+      setIsSubmittingAnswer(false);
     }
   };
 
-  const lastSeenAt =
-    syncCheck === null || syncCheck === undefined
-      ? null
-      : new Date(syncCheck.lastSeenAt).toLocaleString();
+  if (isLoading || curriculum === undefined || progress === undefined) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator />
+        <Text style={styles.body}>Loading first grade math...</Text>
+      </View>
+    );
+  }
+
+  if (!isAuthenticated || curriculum === null || selectedLesson === undefined) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Math is loading</Text>
+        <Text style={styles.body}>We are connecting your account.</Text>
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>You're signed in</Text>
-      <Text style={styles.body}>Signed in as {primaryEmail}</Text>
-      <View style={styles.syncPanel}>
-        <Text style={styles.syncLabel}>Convex sync</Text>
-        <Text style={styles.syncValue}>
-          {isLoading
-            ? "Connecting..."
-            : isAuthenticated
-              ? `Authenticated${syncCheck ? ` - ${syncCheck.count} syncs` : ""}`
-              : "Not connected"}
-        </Text>
-        {lastSeenAt ? (
-          <Text style={styles.syncMeta}>Last sync: {lastSeenAt}</Text>
-        ) : null}
-        {syncError ? <Text style={styles.error}>{syncError}</Text> : null}
-        <Pressable
-          disabled={!isAuthenticated || isSyncing}
-          style={[
-            styles.primaryButton,
-            (!isAuthenticated || isSyncing) && styles.disabledButton,
-          ]}
-          onPress={handleSync}
-        >
-          <Text style={styles.primaryButtonText}>
-            {isSyncing ? "Syncing..." : "Sync now"}
-          </Text>
+    <ScrollView contentContainerStyle={styles.learnContent}>
+      <View style={styles.headerRow}>
+        <View>
+          <Text style={styles.eyebrow}>Signed in as {primaryEmail}</Text>
+          <Text style={styles.title}>{curriculum.title}</Text>
+        </View>
+        <Pressable style={styles.signOutButton} onPress={() => signOut()}>
+          <Text style={styles.signOutButtonText}>Sign out</Text>
         </Pressable>
       </View>
-      <Pressable style={styles.secondaryButton} onPress={() => signOut()}>
-        <Text style={styles.secondaryButtonText}>Sign out</Text>
-      </Pressable>
+
+      <View style={styles.progressBand}>
+        <Text style={styles.progressTitle}>
+          {masteredLessons} of {totalLessons} lessons mastered
+        </Text>
+        <View style={styles.progressTrack}>
+          <View
+            style={[
+              styles.progressFill,
+              {
+                width: `${totalLessons === 0 ? 0 : (masteredLessons / totalLessons) * 100}%`,
+              },
+            ]}
+          />
+        </View>
+        <Text style={styles.progressText}>{curriculum.teachingNote}</Text>
+      </View>
+
+      <View style={styles.lessonLayout}>
+        <View style={styles.unitList}>
+          {curriculum.units.map((unit) => (
+            <View key={unit.id} style={styles.unitSection}>
+              <Text style={styles.unitTitle}>{unit.title}</Text>
+              <Text style={styles.unitGoal}>{unit.goal}</Text>
+              {unit.lessons.map((lesson) => {
+                const lessonProgress = progress.find(
+                  (row) => row.lessonId === lesson.id,
+                );
+                const isSelected = lesson.id === selectedLesson.id;
+
+                return (
+                  <Pressable
+                    key={lesson.id}
+                    style={[
+                      styles.lessonButton,
+                      isSelected && styles.lessonButtonSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedLessonId(lesson.id);
+                      setSelectedAnswer(null);
+                      setLessonError(null);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.lessonButtonTitle,
+                        isSelected && styles.lessonButtonTitleSelected,
+                      ]}
+                    >
+                      {lesson.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.lessonButtonMeta,
+                        isSelected && styles.lessonButtonMetaSelected,
+                      ]}
+                    >
+                      {lessonProgress?.status.replace("_", " ") ??
+                        "not started"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.lessonPanel}>
+          <Text style={styles.lessonConcept}>{selectedLesson.concept}</Text>
+          <Text style={styles.lessonTitle}>{selectedLesson.title}</Text>
+          <Text style={styles.lessonExplain}>{selectedLesson.explanation}</Text>
+
+          <LessonVisual
+            model={selectedLesson.visualModel}
+            numbers={selectedLesson.visualNumbers}
+          />
+
+          <Text style={styles.practicePrompt}>{selectedLesson.prompt}</Text>
+          <View style={styles.choiceRow}>
+            {selectedLesson.choices.map((choice) => {
+              const isChosen = selectedAnswer === choice;
+              const isCorrect = choice === selectedLesson.correctAnswer;
+
+              return (
+                <Pressable
+                  key={choice}
+                  disabled={isSubmittingAnswer}
+                  style={[
+                    styles.choiceButton,
+                    isChosen && isCorrect && styles.choiceCorrect,
+                    isChosen && !isCorrect && styles.choiceIncorrect,
+                    isSubmittingAnswer && styles.disabledButton,
+                  ]}
+                  onPress={() => handleAnswer(choice)}
+                >
+                  <Text style={styles.choiceButtonText}>{choice}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {selectedAnswer ? (
+            <Text style={styles.feedbackText}>
+              {selectedAnswer === selectedLesson.correctAnswer
+                ? "Yes. That is right."
+                : "Try again. Look at the picture."}
+            </Text>
+          ) : null}
+          {lessonError ? <Text style={styles.error}>{lessonError}</Text> : null}
+
+          <View style={styles.masteryBox}>
+            <Text style={styles.masteryLabel}>Mastery</Text>
+            <Text style={styles.masteryValue}>
+              {selectedProgress
+                ? `${selectedProgress.masteryScore}% after ${selectedProgress.attemptCount} tries`
+                : "Practice to start"}
+            </Text>
+          </View>
+        </View>
+      </View>
+    </ScrollView>
+  );
+}
+
+function LessonVisual({
+  model,
+  numbers,
+}: {
+  model: string;
+  numbers: number[];
+}) {
+  if (model === "ten_frame") {
+    const filled = numbers[0] ?? 0;
+    return (
+      <View style={styles.tenFrame}>
+        {Array.from({ length: 10 }, (_, index) => (
+          <View
+            key={index}
+            style={[styles.tenCell, index < filled && styles.tenCellFilled]}
+          />
+        ))}
+      </View>
+    );
+  }
+
+  if (model === "object_groups") {
+    return (
+      <View style={styles.visualRow}>
+        <DotGroup count={numbers[0] ?? 0} />
+        <Text style={styles.visualOperator}>+</Text>
+        <DotGroup count={numbers[1] ?? 0} />
+      </View>
+    );
+  }
+
+  if (model === "take_away") {
+    const total = numbers[0] ?? 0;
+    const removed = numbers[1] ?? 0;
+    return (
+      <View style={styles.dotWrap}>
+        {Array.from({ length: total }, (_, index) => (
+          <View
+            key={index}
+            style={[styles.dot, index < removed && styles.dotRemoved]}
+          >
+            {index < removed ? <Text style={styles.removedMark}>x</Text> : null}
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  if (model === "number_line") {
+    const start = numbers[0] ?? 0;
+    const jump = numbers[1] ?? 0;
+    return (
+      <View style={styles.numberLine}>
+        {[0, 5, 10, 15, 20].map((value) => (
+          <View key={value} style={styles.numberTick}>
+            <View style={styles.tickLine} />
+            <Text style={styles.tickText}>{value}</Text>
+          </View>
+        ))}
+        <Text style={styles.jumpText}>
+          Start {start}, {jump > 0 ? "jump forward" : "jump back"}{" "}
+          {Math.abs(jump)}
+        </Text>
+      </View>
+    );
+  }
+
+  if (model === "base_ten") {
+    return (
+      <View style={styles.baseTenRow}>
+        <View style={styles.tenRodColumn}>
+          {Array.from({ length: numbers[0] ?? 0 }, (_, index) => (
+            <View key={index} style={styles.tenRod} />
+          ))}
+        </View>
+        <DotGroup count={numbers[1] ?? 0} />
+      </View>
+    );
+  }
+
+  if (model === "skip_count") {
+    return (
+      <View style={styles.skipRow}>
+        {numbers.map((number) => (
+          <View key={number} style={styles.skipBubble}>
+            <Text style={styles.skipText}>{number}</Text>
+          </View>
+        ))}
+        <Text style={styles.skipNext}>?</Text>
+      </View>
+    );
+  }
+
+  if (model === "measurement_units") {
+    return (
+      <View style={styles.measurementBox}>
+        <View style={styles.pencil} />
+        <View style={styles.clipRow}>
+          {Array.from({ length: numbers[0] ?? 0 }, (_, index) => (
+            <View key={index} style={styles.paperClip} />
+          ))}
+        </View>
+      </View>
+    );
+  }
+
+  if (model === "clock") {
+    return (
+      <View style={styles.clock}>
+        <Text style={[styles.clockNumber, styles.clockTwelve]}>12</Text>
+        <Text style={[styles.clockNumber, styles.clockThree]}>3</Text>
+        <Text style={[styles.clockNumber, styles.clockSix]}>6</Text>
+        <Text style={[styles.clockNumber, styles.clockNine]}>9</Text>
+        <View style={styles.hourHand} />
+        <View style={styles.minuteHand} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.shapeRow}>
+      <View style={styles.triangle} />
+      <View style={styles.squareShape} />
+      <View style={styles.circleShape} />
+    </View>
+  );
+}
+
+function DotGroup({ count }: { count: number }) {
+  return (
+    <View style={styles.dotWrap}>
+      {Array.from({ length: count }, (_, index) => (
+        <View key={index} style={styles.dot} />
+      ))}
     </View>
   );
 }
@@ -552,5 +827,434 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 12,
     textAlign: "center",
+  },
+  learnContent: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  headerRow: {
+    gap: 14,
+    marginBottom: 18,
+  },
+  eyebrow: {
+    color: "#64748b",
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  signOutButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  signOutButtonText: {
+    color: "#334155",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  progressBand: {
+    backgroundColor: "#f8fafc",
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 18,
+    padding: 16,
+  },
+  progressTitle: {
+    color: "#0f172a",
+    fontSize: 17,
+    fontWeight: "800",
+    marginBottom: 10,
+  },
+  progressTrack: {
+    backgroundColor: "#e2e8f0",
+    borderRadius: 8,
+    height: 12,
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  progressFill: {
+    backgroundColor: "#16a34a",
+    height: 12,
+  },
+  progressText: {
+    color: "#475569",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  lessonLayout: {
+    gap: 16,
+  },
+  unitList: {
+    gap: 12,
+  },
+  unitSection: {
+    borderBottomColor: "#e2e8f0",
+    borderBottomWidth: 1,
+    paddingBottom: 12,
+  },
+  unitTitle: {
+    color: "#0f172a",
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 4,
+  },
+  unitGoal: {
+    color: "#475569",
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  lessonButton: {
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 8,
+    padding: 12,
+  },
+  lessonButtonSelected: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+  },
+  lessonButtonTitle: {
+    color: "#0f172a",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  lessonButtonTitleSelected: {
+    color: "#ffffff",
+  },
+  lessonButtonMeta: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 4,
+    textTransform: "capitalize",
+  },
+  lessonButtonMetaSelected: {
+    color: "#cbd5e1",
+  },
+  lessonPanel: {
+    backgroundColor: "#ffffff",
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 16,
+  },
+  lessonConcept: {
+    color: "#2563eb",
+    fontSize: 13,
+    fontWeight: "900",
+    marginBottom: 4,
+    textTransform: "uppercase",
+  },
+  lessonTitle: {
+    color: "#0f172a",
+    fontSize: 24,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
+  lessonExplain: {
+    color: "#475569",
+    fontSize: 16,
+    lineHeight: 23,
+    marginBottom: 14,
+  },
+  tenFrame: {
+    borderColor: "#0f172a",
+    borderRadius: 8,
+    borderWidth: 2,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    height: 116,
+    marginBottom: 16,
+    maxWidth: 280,
+    overflow: "hidden",
+    width: "100%",
+  },
+  tenCell: {
+    alignItems: "center",
+    borderColor: "#0f172a",
+    borderWidth: 1,
+    height: 56,
+    justifyContent: "center",
+    width: "20%",
+  },
+  tenCellFilled: {
+    backgroundColor: "#f97316",
+  },
+  visualRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 16,
+  },
+  visualOperator: {
+    color: "#0f172a",
+    fontSize: 28,
+    fontWeight: "900",
+  },
+  dotWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    maxWidth: 180,
+  },
+  dot: {
+    alignItems: "center",
+    backgroundColor: "#22c55e",
+    borderRadius: 14,
+    height: 28,
+    justifyContent: "center",
+    width: 28,
+  },
+  dotRemoved: {
+    backgroundColor: "#fecaca",
+    borderColor: "#dc2626",
+    borderWidth: 2,
+  },
+  removedMark: {
+    color: "#991b1b",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  numberLine: {
+    borderTopColor: "#0f172a",
+    borderTopWidth: 3,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 44,
+    marginTop: 34,
+    paddingTop: 0,
+  },
+  numberTick: {
+    alignItems: "center",
+    marginTop: -12,
+  },
+  tickLine: {
+    backgroundColor: "#0f172a",
+    height: 20,
+    width: 3,
+  },
+  tickText: {
+    color: "#0f172a",
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: 4,
+  },
+  jumpText: {
+    bottom: -34,
+    color: "#2563eb",
+    fontSize: 14,
+    fontWeight: "800",
+    left: 0,
+    position: "absolute",
+  },
+  baseTenRow: {
+    alignItems: "flex-end",
+    flexDirection: "row",
+    gap: 18,
+    marginBottom: 16,
+  },
+  tenRodColumn: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  tenRod: {
+    backgroundColor: "#60a5fa",
+    borderColor: "#1d4ed8",
+    borderRadius: 6,
+    borderWidth: 1,
+    height: 110,
+    width: 24,
+  },
+  skipRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 16,
+  },
+  skipBubble: {
+    alignItems: "center",
+    backgroundColor: "#e0f2fe",
+    borderColor: "#0284c7",
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 54,
+    justifyContent: "center",
+    width: 54,
+  },
+  skipText: {
+    color: "#075985",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  skipNext: {
+    color: "#0f172a",
+    fontSize: 28,
+    fontWeight: "900",
+  },
+  measurementBox: {
+    marginBottom: 16,
+  },
+  pencil: {
+    backgroundColor: "#facc15",
+    borderRadius: 8,
+    height: 22,
+    marginBottom: 10,
+    maxWidth: 260,
+    width: "90%",
+  },
+  clipRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  paperClip: {
+    borderColor: "#64748b",
+    borderRadius: 10,
+    borderWidth: 2,
+    height: 34,
+    width: 20,
+  },
+  clock: {
+    alignSelf: "flex-start",
+    borderColor: "#0f172a",
+    borderRadius: 70,
+    borderWidth: 3,
+    height: 140,
+    marginBottom: 16,
+    position: "relative",
+    width: 140,
+  },
+  clockNumber: {
+    color: "#0f172a",
+    fontSize: 14,
+    fontWeight: "900",
+    position: "absolute",
+  },
+  clockTwelve: {
+    left: 58,
+    top: 8,
+  },
+  clockThree: {
+    right: 12,
+    top: 60,
+  },
+  clockSix: {
+    bottom: 8,
+    left: 64,
+  },
+  clockNine: {
+    left: 12,
+    top: 60,
+  },
+  hourHand: {
+    backgroundColor: "#0f172a",
+    height: 4,
+    left: 70,
+    position: "absolute",
+    top: 68,
+    width: 42,
+  },
+  minuteHand: {
+    backgroundColor: "#0f172a",
+    height: 54,
+    left: 68,
+    position: "absolute",
+    top: 18,
+    width: 4,
+  },
+  shapeRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 18,
+    marginBottom: 16,
+  },
+  triangle: {
+    borderBottomColor: "#f97316",
+    borderBottomWidth: 58,
+    borderLeftColor: "transparent",
+    borderLeftWidth: 32,
+    borderRightColor: "transparent",
+    borderRightWidth: 32,
+    height: 0,
+    width: 0,
+  },
+  squareShape: {
+    backgroundColor: "#22c55e",
+    height: 58,
+    width: 58,
+  },
+  circleShape: {
+    backgroundColor: "#60a5fa",
+    borderRadius: 29,
+    height: 58,
+    width: 58,
+  },
+  practicePrompt: {
+    color: "#0f172a",
+    fontSize: 18,
+    fontWeight: "800",
+    lineHeight: 25,
+    marginBottom: 12,
+  },
+  choiceRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 12,
+  },
+  choiceButton: {
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    borderWidth: 1,
+    minWidth: 78,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  choiceCorrect: {
+    backgroundColor: "#bbf7d0",
+    borderColor: "#16a34a",
+  },
+  choiceIncorrect: {
+    backgroundColor: "#fecaca",
+    borderColor: "#dc2626",
+  },
+  choiceButtonText: {
+    color: "#0f172a",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  feedbackText: {
+    color: "#334155",
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  masteryBox: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 8,
+    marginTop: 4,
+    padding: 12,
+  },
+  masteryLabel: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "900",
+    marginBottom: 3,
+    textTransform: "uppercase",
+  },
+  masteryValue: {
+    color: "#0f172a",
+    fontSize: 15,
+    fontWeight: "800",
   },
 });

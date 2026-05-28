@@ -8,4 +8,47 @@ export default defineSchema({
     lastSeenAt: v.number(),
     count: v.number(),
   }).index("by_tokenIdentifier", ["tokenIdentifier"]),
+  learnerProfiles: defineTable({
+    tokenIdentifier: v.string(),
+    email: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    activeGradeLevel: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_tokenIdentifier", ["tokenIdentifier"]),
+  lessonProgress: defineTable({
+    tokenIdentifier: v.string(),
+    gradeLevel: v.number(),
+    unitId: v.string(),
+    lessonId: v.string(),
+    status: v.union(
+      v.literal("not_started"),
+      v.literal("in_progress"),
+      v.literal("mastered"),
+    ),
+    correctCount: v.number(),
+    attemptCount: v.number(),
+    masteryScore: v.number(),
+    lastPracticedAt: v.number(),
+  })
+    .index("by_tokenIdentifier", ["tokenIdentifier"])
+    .index("by_tokenIdentifier_and_gradeLevel", [
+      "tokenIdentifier",
+      "gradeLevel",
+    ])
+    .index("by_tokenIdentifier_and_lessonId", ["tokenIdentifier", "lessonId"]),
+  activityAttempts: defineTable({
+    tokenIdentifier: v.string(),
+    gradeLevel: v.number(),
+    unitId: v.string(),
+    lessonId: v.string(),
+    activityId: v.string(),
+    isCorrect: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_tokenIdentifier_and_lessonId", ["tokenIdentifier", "lessonId"])
+    .index("by_tokenIdentifier_and_createdAt", [
+      "tokenIdentifier",
+      "createdAt",
+    ]),
 });

@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as curriculum from "../curriculum.js";
+import type * as firstGradeCurriculum from "../firstGradeCurriculum.js";
 import type * as hello from "../hello.js";
 import type * as sync from "../sync.js";
 
@@ -18,6 +20,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  curriculum: typeof curriculum;
+  firstGradeCurriculum: typeof firstGradeCurriculum;
   hello: typeof hello;
   sync: typeof sync;
 }>;
